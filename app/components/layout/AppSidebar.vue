@@ -27,7 +27,7 @@ const { sidebar } = useAppSettings()
 
       <!-- Branding Text -->
       <div class="flex flex-col items-center text-center gap-2">
-        <h2 class="text-xl font-bold tracking-tight bg-linear-to-br from-foreground to-foreground/70 bg-clip-text">
+        <h2 class="text-xl font-bold tracking-tight bg-linear-to-br from-foreground to-foreground/70 bg-clip-text text-primary">
           BangLipai Cloud
         </h2>
         <p class="text-[13px] text-muted-foreground leading-relaxed max-w-[200px]">
