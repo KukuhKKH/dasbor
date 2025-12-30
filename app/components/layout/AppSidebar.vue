@@ -57,20 +57,20 @@ const { sidebar } = useAppSettings()
       <!-- Navigation Links -->
       <div class="flex flex-col w-full gap-2 mt-2">
         <Button variant="ghost" class="w-full justify-start gap-3 px-4 py-6 text-sm font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary group/nav" as-child>
-          <NuxtLink to="/terminal">
+          <div class="cursor-pointer">
             <div class="p-2 rounded-lg bg-primary/5 group-hover/nav:bg-primary/20 transition-colors">
               <Icon name="i-lucide-terminal" class="size-4" />
             </div>
             System Terminal
-          </NuxtLink>
+          </div>
         </Button>
         <Button variant="ghost" class="w-full justify-start gap-3 px-4 py-6 text-sm font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary group/nav" as-child>
-          <NuxtLink to="/topology">
+          <div class="cursor-pointer">
             <div class="p-2 rounded-lg bg-primary/5 group-hover/nav:bg-primary/20 transition-colors">
               <Icon name="i-lucide-network" class="size-4" />
             </div>
             Network Topology
-          </NuxtLink>
+          </div>
         </Button>
       </div>
     </SidebarContent>
