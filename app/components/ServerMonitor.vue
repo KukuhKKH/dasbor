@@ -7,7 +7,7 @@ const { data, refresh } = await useFetch<NetworkStats>('/api/network', {
 })
 
 // Auto-refresh every 10 seconds
-useIntervalFn(() => refresh(), 90000000)
+useIntervalFn(() => refresh(), 10000)
 
 function formatUptime(seconds: number) {
   const h = Math.floor(seconds / 3600)
