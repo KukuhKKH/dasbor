@@ -128,7 +128,7 @@ watch(volume, (newVal) => {
     class="w-full bg-linear-to-t from-card to-card/50 shadow-lg border-primary/10 overflow-hidden"
   >
     <CardHeader
-      class="flex flex-row items-center justify-between space-y-0 pb-4"
+      class="flex flex-row items-center justify-between space-y-0"
     >
       <div class="space-y-1">
         <CardTitle class="text-xl font-bold tracking-tight text-primary">

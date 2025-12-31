@@ -6,13 +6,32 @@ const { data, refresh } = await useFetch<NetworkStats>('/api/network', {
   key: 'network-stats',
 })
 
-// Auto-refresh every 10 seconds
-useIntervalFn(() => refresh(), 10000)
+const uptimeSeconds = ref(0)
+
+watch(data, (newVal: NetworkStats | null) => {
+  if (newVal?.uptime?.seconds) {
+    uptimeSeconds.value = newVal.uptime.seconds
+  }
+}, { immediate: true })
+
+// Count up every second
+useIntervalFn(() => {
+  uptimeSeconds.value++
+}, 1000)
+
+// Auto-refresh every 15 minutes
+useIntervalFn(() => refresh(), 15 * 60 * 1000)
 
 function formatUptime(seconds: number) {
-  const h = Math.floor(seconds / 3600)
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = Math.floor(seconds % 60)
+
+  if (d > 0) {
+    return `${d}d ${h}h ${m}m ${s}s`
+  }
+
   return `${h}h ${m}m ${s}s`
 }
 </script>
@@ -53,7 +72,7 @@ function formatUptime(seconds: number) {
             Server Uptime
           </span>
           <span class="text-2xl font-bold tabular-nums text-primary">
-            {{ data?.uptime ? formatUptime(data.uptime.seconds) : "---" }}
+            {{ data?.uptime ? formatUptime(uptimeSeconds) : "---" }}
           </span>
           <span class="text-[10px] text-muted-foreground italic">
             Started:

@@ -12,9 +12,10 @@ const { isMobile } = useSidebar();
       <div v-if="isMobile" class="flex items-center">
         <SidebarTrigger />
       </div>
-      <MiniPlayer />
+      <DasboardMiniPlayer />
 
       <ServerMonitor />
+      <DasboardServerMonitor />
     </main>
   </div>
 </template>
