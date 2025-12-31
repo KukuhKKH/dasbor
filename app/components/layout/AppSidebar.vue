@@ -10,6 +10,7 @@ function resolveNavItemComponent(item: NavLink | NavGroup | NavSectionTitle): an
 }
 const { sidebar } = useAppSettings()
 const showTerminal = ref(false)
+const showTopology = ref(false)
 </script>
 
 <template>
@@ -65,8 +66,8 @@ const showTerminal = ref(false)
             System Terminal
           </div>
         </Button>
-        <Button variant="ghost" class="w-full justify-start gap-3 px-4 py-6 text-sm font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary group/nav" as-child>
-          <div class="cursor-pointer">
+        <Button variant="ghost" class="w-full justify-start gap-3 px-4 py-6 text-sm font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary group/nav" @click="showTopology = true">
+          <div class="cursor-pointer flex items-center gap-3 w-full">
             <div class="p-2 rounded-lg bg-primary/5 group-hover/nav:bg-primary/20 transition-colors">
               <Icon name="i-lucide-network" class="size-4" />
             </div>
@@ -79,6 +80,7 @@ const showTerminal = ref(false)
   </Sidebar>
 
   <TerminalModal v-model:open="showTerminal" />
+  <NetworkTopologyModal v-model:open="showTopology" />
 </template>
 
 <style scoped>
