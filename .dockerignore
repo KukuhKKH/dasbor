@@ -1,0 +1,10 @@
+.git
+.nuxt
+.idea
+.vscode
+dist
+*.log
+.env
+node_modules
+.output/server/node_modules
+**/.output/server/node_modules

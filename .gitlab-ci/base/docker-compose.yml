@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  base_image:
+    image: ${IMAGE_NAMESPACE}/server-dashboard-base:latest
+    
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - "linux/amd64"

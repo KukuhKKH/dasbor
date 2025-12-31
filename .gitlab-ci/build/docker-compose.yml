@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  app:
+    image: ${IMAGE_NAMESPACE}/server-dashboard:latest
+    build:
+      context: ../..
+      dockerfile: .gitlab-ci/build/Dockerfile
+      platforms: ["linux/amd64"]

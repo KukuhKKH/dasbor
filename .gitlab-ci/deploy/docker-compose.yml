@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  landing:
+    image: ${IMAGE_NAMESPACE}/server-dashboard:latest
+
+    networks:
+      - traefik-public
+
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 300M
+        reservations:
+          memory: 128M
+
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.${STACK_NAME}.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.routers.${STACK_NAME}.entrypoints=websecure"
+        - "traefik.http.routers.${STACK_NAME}.tls.certresolver=myresolver"
+        - "traefik.http.services.${STACK_NAME}.loadbalancer.server.port=3000"
+
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      - SI_FS_PREFIX=/host
+      - NUXT_APP_BASE_URL=/
+      - NUXT_PUBLIC_MUSIC_DIR=/app/.output/public/music
+
+networks:
+  traefik-public:
+    external: true
