@@ -9,6 +9,7 @@ function resolveNavItemComponent(item: NavLink | NavGroup | NavSectionTitle): an
   return resolveComponent('LayoutSidebarNavLink')
 }
 const { sidebar } = useAppSettings()
+const showTerminal = ref(false)
 </script>
 
 <template>
@@ -56,8 +57,8 @@ const { sidebar } = useAppSettings()
 
       <!-- Navigation Links -->
       <div class="flex flex-col w-full gap-2 mt-2">
-        <Button variant="ghost" class="w-full justify-start gap-3 px-4 py-6 text-sm font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary group/nav" as-child>
-          <div class="cursor-pointer">
+        <Button variant="ghost" class="w-full justify-start gap-3 px-4 py-6 text-sm font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary group/nav" @click="showTerminal = true">
+          <div class="cursor-pointer flex items-center gap-3 w-full">
             <div class="p-2 rounded-lg bg-primary/5 group-hover/nav:bg-primary/20 transition-colors">
               <Icon name="i-lucide-terminal" class="size-4" />
             </div>
@@ -76,6 +77,8 @@ const { sidebar } = useAppSettings()
     </SidebarContent>
     <SidebarRail />
   </Sidebar>
+
+  <TerminalModal v-model:open="showTerminal" />
 </template>
 
 <style scoped>
