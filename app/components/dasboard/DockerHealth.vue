@@ -19,6 +19,10 @@ useIntervalFn(() => {
   refresh()
 }, 60 * 60 * 1000)
 
+const activeCount = computed(() => {
+  return containers.value?.filter(c => c.state === 'running').length || 0
+})
+
 function getStateColor(state: string) {
   switch (state) {
     case 'running': return 'bg-emerald-500'
@@ -51,7 +55,7 @@ function getStateRingColor(state: string) {
          </div>
          <div class="flex items-center gap-2 bg-secondary/50 px-3 py-1 rounded-full border border-primary/5">
             <span class="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-            <span class="text-xs font-semibold text-foreground">{{ containers?.length || 0 }} Active</span>
+            <span class="text-xs font-semibold text-foreground">{{ activeCount }} Active</span>
          </div>
       </CardHeader>
 
