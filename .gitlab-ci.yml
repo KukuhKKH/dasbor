@@ -1,0 +1,94 @@
+stages:
+  - compile
+  - infra
+  - package
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+
+build_assets:
+  stage: compile
+  image: node:22-alpine
+  script:
+    - echo "node-linker=hoisted" > .npmrc
+    - corepack enable
+    - pnpm install
+
+    - pnpm build
+  artifacts:
+    name: "nuxt-output-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - .output/
+    expire_in: 1 hour
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+      - .pnpm-store/
+
+build_base:
+  stage: infra
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$IMAGE_NAMESPACE" -p "$DOCKER_PASSWORD"
+  script:
+    - docker compose -f .gitlab-ci/base/docker-compose.yml build
+    - docker compose -f .gitlab-ci/base/docker-compose.yml push
+  rules:
+    - changes:
+        - .gitlab-ci/base/**/*
+      when: always
+    - when: manual
+      allow_failure: true
+
+build_final_image:
+  stage: package
+  image: docker:latest
+  services:
+    - docker:dind
+  dependencies:
+    - build_assets
+  before_script:
+    - docker login -u "$IMAGE_NAMESPACE" -p "$DOCKER_PASSWORD"
+  script:
+    - ls -la .output
+
+    - docker compose -f .gitlab-ci/build/docker-compose.yml build
+    - docker compose -f .gitlab-ci/build/docker-compose.yml push
+
+deploy_swarm:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+
+    - ssh-keyscan $SSH_HOST >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+  script:
+    - scp .gitlab-ci/deploy/docker-compose.yml $SSH_USER@$SSH_HOST:~/deploy-dashboard.yml
+
+    - |
+      ssh $SSH_USER@$SSH_HOST "
+        export IMAGE_NAMESPACE=$IMAGE_NAMESPACE
+        export STACK_NAME=$STACK_NAME
+        export DOMAIN=$DOMAIN
+      
+        # Login registry
+        echo $DOCKER_PASSWORD | docker login -u $IMAGE_NAMESPACE --password-stdin
+      
+        # Deploy Stack
+        docker stack deploy --with-registry-auth -c ~/deploy-dashboard.yml $STACK_NAME
+      "
+  environment:
+    name: production
+    url: https://$DOMAIN
+  only:
+    - main
