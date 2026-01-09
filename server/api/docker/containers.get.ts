@@ -1,26 +1,50 @@
-import Docker from 'dockerode'
+import Docker from 'dockerode';
 
-export default defineEventHandler(async () => {
-   const docker = new Docker({ socketPath: '/var/run/docker.sock' })
+const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
+export default defineEventHandler(async (event) => {
    try {
-      const containers = await docker.listContainers({ all: true })
+      const containers = await docker.listContainers({ all: true });
 
-      return containers.map((c) => {
-         const name = c.Names[0].replace(/^\//, '')
+      const formattedContainers = containers.map((c) => {
+
+         const rawImage = c.Image || 'unknown';
+         const cleanImage = rawImage.replace('sha256:', '');
+
+         let cleanName = 'System/Unknown';
+         if (c.Names && c.Names.length > 0) {
+            cleanName = c.Names[0].replace(/^\//, '');
+         }
+
 
          return {
             id: c.Id.substring(0, 12),
-            name,
-            image: c.Image,
+            name: cleanName,
+            image: cleanImage,
             state: c.State,
             status: c.Status,
-            stack: c.Labels['com.docker.stack.namespace'] || 'Standalone',
-         }
-      })
+            created: c.Created,
+            ports: c.Ports || [],
+            labels: c.Labels || {},
+
+         };
+      });
+
+      return formattedContainers;
+
+   } catch (error: any) {
+      console.error('Docker API Error:', error);
+
+      if (error.code === 'EACCES' || error.syscall === 'connect') {
+         throw createError({
+            statusCode: 500,
+            statusMessage: 'Permission Denied: Cannot access /var/run/docker.sock. Check user permissions.',
+         });
+      }
+
+      throw createError({
+         statusCode: 500,
+         statusMessage: error.message || 'Failed to fetch containers',
+      });
    }
-   catch (error: any) {
-      console.error('Docker Error:', error.message)
-      return []
-   }
-})
+});

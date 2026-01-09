@@ -7,7 +7,9 @@ interface Container {
   image: string
   state: string
   status: string
-  stack: string
+  created: number
+  ports: any[]
+  labels: Record<string, string>
 }
 
 const { data: containers, refresh, error } = await useFetch<Container[]>('/api/docker/containers', {
@@ -40,6 +42,10 @@ function getStateRingColor(state: string) {
     default: return 'ring-red-500/30'
   }
 }
+
+function getStack(c: Container) {
+   return c.labels?.['com.docker.stack.namespace'] || 'Standalone'
+}
 </script>
 
 <template>
@@ -63,8 +69,8 @@ function getStateRingColor(state: string) {
          
          <div v-if="error" class="flex flex-col items-center justify-center py-10 text-center text-destructive space-y-2">
             <Icon name="i-lucide-alert-triangle" class="size-8" />
-            <div class="text-sm font-medium">Docker Socket Unreachable</div>
-            <span class="text-xs text-muted-foreground">Ensure /var/run/docker.sock is mounted</span>
+            <div class="text-sm font-medium">{{ error.statusMessage || 'Docker Connection Failed' }}</div>
+            <span class="text-xs text-muted-foreground">{{ error.message || 'Ensure /var/run/docker.sock is mounted' }}</span>
          </div>
 
          <template v-else>
@@ -85,7 +91,7 @@ function getStateRingColor(state: string) {
                            {{ c.name }}
                         </h3>
                         <span class="text-[10px] uppercase font-bold tracking-wider text-muted-foreground/70 bg-background/50 px-1.5 py-0.5 rounded">
-                           {{ c.stack }}
+                           {{ getStack(c) }}
                         </span>
                      </div>
                      
