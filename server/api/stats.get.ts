@@ -1,9 +1,10 @@
 import si from 'systeminformation'
+import fs from 'fs/promises'
 
 export default defineEventHandler(async () => {
 
    try {
-      const [os, cpu, mem, fs, net] = await Promise.all([
+      const [os, cpu, mem, fsSize, net] = await Promise.all([
          si.osInfo(),
          si.currentLoad(),
          si.mem(),
@@ -11,15 +12,20 @@ export default defineEventHandler(async () => {
          si.networkStats(),
       ])
 
-      const rootFs = fs.find(d => d.mount === '/') || fs[0]
+      let hostHostname = os.hostname
+      try {
+         hostHostname = (await fs.readFile('/host/etc/hostname', 'utf8')).trim()
+      } catch {}
+
+      const rootFs = fsSize.find(d => d.mount === '/') || fsSize[0]
       const defaultNet = net.find(i => i.iface !== 'lo') || net[0]
 
       return {
          os: {
             distro: os.distro,
             release: os.release,
-            hostname: os.hostname,
             arch: os.arch,
+            hostname: hostHostname,
          },
          cpu: {
             load: Math.round(cpu.currentLoad),
