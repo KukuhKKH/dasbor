@@ -1,7 +1,21 @@
 import tailwindcss from '@tailwindcss/vite'
+
+type MaybeProcessEnv = typeof globalThis & {
+  process?: { env?: Record<string, string | undefined> }
+}
+
+const env = ((globalThis as MaybeProcessEnv).process?.env) ?? {}
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   devtools: { enabled: true },
+
+  runtimeConfig: {
+    musicApi: {
+      baseUrl: env.MUSIC_API_BASE || 'http://localhost:3000',
+      placeholderUrl: env.MUSIC_API_PLACEHOLDER_URL || 'https://placehold.co/400?text=No+Cover&bg=1e293b&fg=ffffff',
+    },
+  },
 
   css: ['~/assets/css/tailwind.css'],
   vite: {

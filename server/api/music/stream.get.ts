@@ -1,6 +1,8 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { Readable } from 'stream'
 import { sendStream } from 'h3'
+import { buildMusicApiUrl, buildMusicApiHeaders } from '../../utils/music'
+
+const SUCCESS_STATUSES = new Set([200, 206])
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -10,43 +12,35 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
   }
 
-  let baseDir = process.env.NUXT_PUBLIC_MUSIC_DIR
+  const rangeHeader = event.node.req.headers.range
+  const remoteUrl = `${buildMusicApiUrl(event, '/api/music/stream')}?file=${encodeURIComponent(filename)}`
 
-  if (!baseDir) {
-    baseDir = process.env.NODE_ENV === 'production' 
-      ? './.output/public/music' 
-      : './public/music'
+  const headers = buildMusicApiHeaders()
+  if (rangeHeader)
+    headers.Range = rangeHeader
+
+  const response = await fetch(remoteUrl, { headers })
+
+  if (!SUCCESS_STATUSES.has(response.status)) {
+    let statusMessage = response.statusText
+    try {
+      const payload = await response.clone().json()
+      statusMessage = payload?.statusMessage || payload?.message || statusMessage
+    } catch {}
+
+    throw createError({ statusCode: response.status, statusMessage })
   }
 
-  const musicDir = path.resolve(process.cwd(), baseDir)
-  const filePath = path.join(musicDir, filename)
-
-  if (!fs.existsSync(filePath)) {
-    throw createError({ statusCode: 404, statusMessage: `File not found in ${musicDir}` })
+  const body = response.body
+  if (!body) {
+    throw createError({ statusCode: 502, statusMessage: 'Upstream music stream unavailable' })
   }
 
-  const stat = fs.statSync(filePath)
-  const fileSize = stat.size
-  const range = event.node.req.headers.range
+  setResponseStatus(event, response.status)
+  response.headers.forEach((value, key) => {
+    if (value)
+      setResponseHeader(event, key, value)
+  })
 
-  if (range) {
-    const parts = range.replace(/bytes=/, '').split('-')
-    const start = parseInt(parts[0], 10)
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1
-    const chunksize = (end - start) + 1
-    const file = fs.createReadStream(filePath, { start, end })
-
-    setResponseHeader(event, 'Content-Range', `bytes ${start}-${end}/${fileSize}`)
-    setResponseHeader(event, 'Accept-Ranges', 'bytes')
-    setResponseHeader(event, 'Content-Length', chunksize)
-    setResponseHeader(event, 'Content-Type', 'audio/mpeg')
-    setResponseStatus(event, 206)
-    return sendStream(event, file)
-  }
-  else {
-    const file = fs.createReadStream(filePath)
-    setResponseHeader(event, 'Content-Length', fileSize)
-    setResponseHeader(event, 'Content-Type', 'audio/mpeg')
-    return sendStream(event, file)
-  }
+  return sendStream(event, Readable.fromWeb(body as any))
 })
