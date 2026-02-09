@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ConfigProvider } from 'reka-ui'
 import { Toaster } from '@/components/ui/sonner'
+import AppPreloader from '@/components/ui/AppPreloader.vue'
 import 'vue-sonner/style.css'
 
 const colorMode = useColorMode()
@@ -43,11 +44,22 @@ defineShortcuts({
 
 const textDirection = useTextDirection({ initialValue: 'ltr' })
 const dir = computed(() => textDirection.value === 'rtl' ? 'rtl' : 'ltr')
+
+const loading = ref(true)
+
+onMounted(() => {
+  setTimeout(() => {
+    loading.value = false
+  }, 1500)
+})
 </script>
 
 <template>
   <Body class="overscroll-none antialiased bg-background text-foreground">
     <ConfigProvider :dir="dir">
+      
+      <AppPreloader :loading="loading" />
+
       <div id="app" vaul-drawer-wrapper class="relative">
         <NuxtLayout>
           <NuxtPage />
