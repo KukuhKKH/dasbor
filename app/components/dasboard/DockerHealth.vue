@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useIntervalFn } from "@vueuse/core";
 
+import { toast } from 'vue-sonner'
+
 interface Container {
   id: string;
   name: string;
@@ -76,6 +78,38 @@ function formatBytes(bytes: number) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${(bytes / k ** i).toFixed(1)} ${sizes[i]}`;
 }
+
+// Actions & Auth
+const authOpen = ref(false)
+const pendingAction = ref<{ id: string, action: string } | null>(null)
+const isAuthenticated = useCookie('docker_is_authenticated')
+
+function handleAction(id: string, action: string) {
+  if (isAuthenticated.value) {
+    executeAction(id, action)
+  } else {
+    pendingAction.value = { id, action }
+    authOpen.value = true
+  }
+}
+
+function onAuthenticated() {
+  if (pendingAction.value) {
+    executeAction(pendingAction.value.id, pendingAction.value.action)
+    pendingAction.value = null
+  }
+}
+
+async function executeAction(id: string, action: string) {
+  try {
+     toast.info(`Executing ${action}...`)
+     await $fetch(`/api/docker/${id}/${action}`, { method: 'POST' })
+     toast.success(`Container ${action}ed successfully`)
+     refresh()
+  } catch (e: any) {
+     toast.error(e.data?.statusMessage || `Failed to ${action} container`)
+  }
+}
 </script>
 
 <template>
@@ -91,15 +125,20 @@ function formatBytes(bytes: number) {
           Container status & live metrics
         </CardDescription>
       </div>
-      <div
-        class="flex items-center gap-2 bg-secondary/50 px-3 py-1 rounded-full border border-primary/5"
-      >
-        <span
-          class="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-        />
-        <span class="text-xs font-semibold text-foreground">
-          {{ activeCount }} Active
-        </span>
+      <div class="flex items-center gap-2">
+         <div
+           class="flex items-center gap-2 bg-secondary/50 px-3 py-1 rounded-full border border-primary/5"
+         >
+           <span
+             class="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+           />
+           <span class="text-xs font-semibold text-foreground">
+             {{ activeCount }} Active
+           </span>
+         </div>
+         <Button variant="outline" size="icon" class="h-8 w-8 rounded-full" @click="refresh()">
+             <Icon name="i-lucide-refresh-cw" class="size-4" />
+         </Button>
       </div>
     </CardHeader>
 
@@ -162,11 +201,39 @@ function formatBytes(bytes: number) {
                   >
                     {{ c.name }}
                   </h3>
-                  <span
-                    class="text-[9px] uppercase font-bold tracking-wider text-muted-foreground/60 bg-background/40 px-1.5 py-0.5 rounded"
-                  >
-                    {{ getStack(c) }}
-                  </span>
+                  
+                  <div class="flex items-center gap-2">
+                     <span
+                       class="text-[9px] uppercase font-bold tracking-wider text-muted-foreground/60 bg-background/40 px-1.5 py-0.5 rounded"
+                     >
+                       {{ getStack(c) }}
+                     </span>
+                     
+                     <!-- Actions Menu -->
+                     <DropdownMenu>
+                       <DropdownMenuTrigger as-child>
+                         <Button variant="ghost" size="icon" class="h-6 w-6 rounded-full hover:bg-background/80">
+                           <Icon name="i-lucide-more-vertical" class="size-3.5" />
+                         </Button>
+                       </DropdownMenuTrigger>
+                       <DropdownMenuContent align="end">
+                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                         <DropdownMenuSeparator />
+                         <DropdownMenuItem @click="handleAction(c.id, 'start')" :disabled="c.state === 'running'">
+                           <Icon name="i-lucide-play" class="mr-2 size-3.5" />
+                           Start
+                         </DropdownMenuItem>
+                         <DropdownMenuItem @click="handleAction(c.id, 'stop')" :disabled="c.state !== 'running'">
+                           <Icon name="i-lucide-square" class="mr-2 size-3.5" />
+                           Stop
+                         </DropdownMenuItem>
+                         <DropdownMenuItem @click="handleAction(c.id, 'restart')">
+                           <Icon name="i-lucide-rotate-cw" class="mr-2 size-3.5" />
+                           Restart
+                         </DropdownMenuItem>
+                       </DropdownMenuContent>
+                     </DropdownMenu>
+                  </div>
                 </div>
                 <div
                   class="text-[10px] text-muted-foreground flex items-center justify-between"
@@ -241,5 +308,7 @@ function formatBytes(bytes: number) {
         </div>
       </template>
     </CardContent>
+    
+    <DockerAuthModal v-model:open="authOpen" @authenticated="onAuthenticated" />
   </Card>
 </template>
