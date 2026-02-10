@@ -10,6 +10,11 @@ const env = ((globalThis as MaybeProcessEnv).process?.env) ?? {}
 export default defineNuxtConfig({
   devtools: { enabled: true },
 
+  devServer: {
+    host: process.env.DEV_HOST || 'localhost',
+    port: parseInt(process.env.DEV_PORT || '3000'),
+  },
+
   runtimeConfig: {
     musicApi: {
       baseUrl: env.MUSIC_API_BASE || 'http://localhost:3000',
