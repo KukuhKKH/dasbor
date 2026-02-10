@@ -27,8 +27,14 @@ export interface SystemStats {
     }
 }
 
+export interface StatsHistory {
+    network: { rx: number, tx: number }
+    timestamp: number
+}
+
 export function useSystemStats() {
     const data = ref<SystemStats | null>(null)
+    const history = ref<StatsHistory[]>([])
     const error = ref<Error | null>(null)
     const status = ref<'connecting' | 'connected' | 'error' | 'offline'>('connecting')
     let eventSource: EventSource | null = null
@@ -36,11 +42,17 @@ export function useSystemStats() {
 
     const fetchStats = async () => {
         try {
-            const res = await $fetch<SystemStats>('/api/stats')
-            data.value = res
+            const res = await $fetch<{ stats: SystemStats, history: any[] }>('/api/stats')
+            data.value = res.stats
+            // Transform history to lighter structure if needed, or pass directly
+            history.value = res.history.map((h: any) => ({
+                network: h.network,
+                timestamp: h.timestamp
+            }))
             status.value = 'connected'
             error.value = null
         } catch (e: any) {
+            console.error('Fetch stats error:', e)
             error.value = e
             status.value = 'error'
         }
@@ -57,27 +69,43 @@ export function useSystemStats() {
             return
         }
 
-        eventSource = new EventSource('/api/stats/stream')
+        // Fetch initial state first to populate history
+        fetchStats().then(() => {
+            eventSource = new EventSource('/api/stats/stream')
 
-        eventSource.onopen = () => {
-            status.value = 'connected'
-            error.value = null
-        }
-
-        eventSource.onmessage = (event) => {
-            try {
-                data.value = JSON.parse(event.data)
-            } catch (e) {
-                console.error('Failed to parse stats:', e)
+            eventSource.onopen = () => {
+                status.value = 'connected'
+                error.value = null
             }
-        }
 
-        eventSource.onerror = (e) => {
-            console.error('SSE Error:', e)
-            status.value = 'error'
-            eventSource?.close()
-            setTimeout(connectSSE, 5000)
-        }
+            eventSource.onmessage = (event) => {
+                try {
+                    const newData = JSON.parse(event.data)
+                    data.value = newData
+
+                    // Push to history
+                    const newPoint: StatsHistory = {
+                        network: { rx: newData.network.rx_sec, tx: newData.network.tx_sec },
+                        timestamp: Date.now()
+                    }
+                    history.value.push(newPoint)
+
+                    // Limit frontend history to keep it snappy (e.g. 50 points)
+                    if (history.value.length > 50) {
+                        history.value.shift()
+                    }
+                } catch (e) {
+                    console.error('Failed to parse stats:', e)
+                }
+            }
+
+            eventSource.onerror = (e) => {
+                console.error('SSE Error:', e)
+                status.value = 'error'
+                eventSource?.close()
+                setTimeout(connectSSE, 5000)
+            }
+        })
     }
 
     onMounted(() => {
@@ -97,6 +125,7 @@ export function useSystemStats() {
 
     return {
         data,
+        history,
         error,
         status,
     }

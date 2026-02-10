@@ -82,6 +82,7 @@ export default defineNitroPlugin((nitroApp) => {
                     rx_sec: defaultNet?.rx_sec || 0,
                     tx_sec: defaultNet?.tx_sec || 0,
                 },
+                timestamp: Date.now(),
             }
 
             statsCache.data = stats

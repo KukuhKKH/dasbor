@@ -1,17 +1,8 @@
 <script setup lang="ts">
 import { useSystemStats } from '~/composables/useSystemStats'
 
-const { data, error, status } = useSystemStats()
-
-const netHistory = ref<{ rx: number, tx: number }[]>(Array(30).fill({ rx: 0, tx: 0 }))
-
-watch(data, (newVal) => {
-  if (newVal?.network) {
-    netHistory.value.push({ rx: newVal.network.rx_sec, tx: newVal.network.tx_sec })
-    if (netHistory.value.length > 30)
-      netHistory.value.shift()
-  }
-})
+// Local history is now handled by composable
+const { data, history, error, status } = useSystemStats()
 
 // Helper: Format Bytes (GB, MB, KB)
 function formatBytes(bytes: number) {
@@ -24,11 +15,20 @@ function formatBytes(bytes: number) {
 }
 
 // Helper: Bikin Path SVG untuk Grafik
+// Helper: Bikin Path SVG untuk Grafik
 function createPath(dataKey: 'rx' | 'tx', height: number) {
-  const points = netHistory.value.map((h, i) => {
-    const maxVal = Math.max(...netHistory.value.map(v => v[dataKey]), 1024 * 10) 
-    const x = i * (100 / 29) 
-    const val = h[dataKey]
+  // Ensure we have data
+  if (!history.value || history.value.length < 2) return ''
+  
+  const points = history.value.map((h, i) => {
+    // Map network rx/tx
+    const val = h.network[dataKey]
+    
+    // Find max value for scaling (min 10KB)
+    const maxVal = Math.max(...history.value.map(v => v.network[dataKey]), 1024 * 10) 
+    
+    // Calculate X position (spread across 100%)
+    const x = i * (100 / (history.value.length - 1))
     const y = height - (val / maxVal) * height
     return `${x},${y}`
   })

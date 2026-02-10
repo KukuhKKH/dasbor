@@ -30,5 +30,9 @@ export default defineEventHandler(() => {
          status: 'initializing'
       }
    }
-   return statsCache.data
+
+   return {
+      stats: statsCache.data,
+      history: statsCache.history
+   }
 })
