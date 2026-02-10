@@ -68,7 +68,7 @@ onMounted(() => {
         <AppSettings />
       </div>
 
-      <Toaster :theme="colorMode.preference as any || 'system'" />
+      <Toaster :theme="colorMode.preference as any || 'system'" position="top-right" />
     </ConfigProvider>
   </Body>
 </template>
