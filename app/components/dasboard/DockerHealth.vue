@@ -93,9 +93,33 @@ function handleAction(id: string, action: string) {
   }
 }
 
+// Logs
+const logsOpen = ref(false)
+const selectedContainer = ref<{ id: string, name: string } | null>(null)
+
+function handleViewLogs(c: Container) {
+  if (isAuthenticated.value) {
+    selectedContainer.value = { id: c.id, name: c.name }
+    logsOpen.value = true
+  } else {
+    // pendingAction usually stores {id, action}, let's overload it or make a new state?
+    // Let's use a specific "view_logs" action string
+    pendingAction.value = { id: c.id, action: 'view_logs:' + c.name }
+    authOpen.value = true
+  }
+}
+
 function onAuthenticated() {
   if (pendingAction.value) {
-    executeAction(pendingAction.value.id, pendingAction.value.action)
+    if (pendingAction.value.action.startsWith('view_logs:')) {
+       // It was a logs request
+       const name = pendingAction.value.action.split(':')[1]
+       selectedContainer.value = { id: pendingAction.value.id, name }
+       logsOpen.value = true
+    } else {
+       // Regular action
+       executeAction(pendingAction.value.id, pendingAction.value.action)
+    }
     pendingAction.value = null
   }
 }
@@ -218,6 +242,10 @@ async function executeAction(id: string, action: string) {
                        </DropdownMenuTrigger>
                        <DropdownMenuContent align="end">
                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                         <DropdownMenuItem @click="handleViewLogs(c)">
+                           <Icon name="i-lucide-file-text" class="mr-2 size-3.5" />
+                           View Logs
+                         </DropdownMenuItem>
                          <DropdownMenuSeparator />
                          <DropdownMenuItem @click="handleAction(c.id, 'start')" :disabled="c.state === 'running'">
                            <Icon name="i-lucide-play" class="mr-2 size-3.5" />
@@ -310,5 +338,10 @@ async function executeAction(id: string, action: string) {
     </CardContent>
     
     <DockerAuthModal v-model:open="authOpen" @authenticated="onAuthenticated" />
+    <DockerLogsModal 
+       v-model:open="logsOpen" 
+       :container-id="selectedContainer?.id || null"
+       :container-name="selectedContainer?.name"
+    />
   </Card>
 </template>
