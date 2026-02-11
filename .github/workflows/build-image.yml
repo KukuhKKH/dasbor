@@ -5,6 +5,12 @@ on:
     branches:
       - build
   workflow_dispatch:
+    inputs:
+      force_build_base:
+        description: 'Force build base image'
+        required: false
+        default: false
+        type: boolean
 
 env:
   DOCKER_HUB: ghcr.io
@@ -14,7 +20,7 @@ jobs:
   check-changes:
     runs-on: ubuntu-latest
     outputs:
-      base_changed: ${{ steps.filter.outputs.base }}
+      base_changed: ${{ steps.check.outputs.base_changed }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -24,6 +30,15 @@ jobs:
             base:
               - '.gitlab-ci/base/**'
               - '.github/workflows/build-image.yml'
+      
+      - name: Check if base needs update
+        id: check
+        run: |
+          if [[ "${{ github.event.inputs.force_build_base }}" == "true" || "${{ steps.filter.outputs.base }}" == "true" ]]; then
+            echo "base_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "base_changed=false" >> $GITHUB_OUTPUT
+          fi
 
   build-base:
     needs: check-changes
@@ -85,11 +100,15 @@ jobs:
       - name: Build App
         run: pnpm build
 
+      - name: Verify Output
+        run: ls -la .output
+
       - name: Upload Output
         uses: actions/upload-artifact@v4
         with:
           name: nuxt-output
-          path: .output
+          path: .output/
+          if-no-files-found: error
           retention-days: 1
 
   build-release:
