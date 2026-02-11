@@ -60,6 +60,10 @@ jobs:
 
   build-app:
     runs-on: ubuntu-latest
+    env:
+      MUSIC_API_BASE: ${{ vars.MUSIC_API_BASE }}
+      MUSIC_API_PLACEHOLDER_URL: ${{ vars.MUSIC_API_PLACEHOLDER_URL }}
+      DOCKER_CONTROL_PASSWORD: ${{ secrets.DOCKER_CONTROL_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
