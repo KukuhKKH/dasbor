@@ -2,8 +2,7 @@ version: '3.8'
 
 services:
   base_image:
-    image: ${IMAGE_NAMESPACE}/server-dashboard-base:latest
-    
+    image: ${DOCKER_HUB}/${IMAGE_NAMESPACE}/server-dashboard-base:latest
     build:
       context: .
       dockerfile: Dockerfile

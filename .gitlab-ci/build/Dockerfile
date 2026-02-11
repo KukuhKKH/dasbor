@@ -1,4 +1,4 @@
-FROM ${IMAGE_NAMESPACE}/server-dashboard-base:latest
+FROM ${DOCKER_HUB}/${IMAGE_NAMESPACE}/server-dashboard-base:latest
 
 WORKDIR /app
 
@@ -7,7 +7,8 @@ COPY .output ./.output
 WORKDIR /app/.output/server
 
 RUN apk add --no-cache --virtual .build-deps python3 make g++ \
-    && npm install --omit=dev \
+    && npm install -g npm@11.9.0 \
+    && npm install --omit=dev --no-audit --no-fund \
     && apk del .build-deps
 
 WORKDIR /app
