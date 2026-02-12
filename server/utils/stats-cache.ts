@@ -72,6 +72,10 @@ class StatsCache extends EventEmitter {
     get history() {
         return this._history
     }
+
+    get activeListeners(): number {
+        return this.listenerCount('update')
+    }
 }
 
 // Singleton instance

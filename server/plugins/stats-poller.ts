@@ -94,7 +94,23 @@ export default defineNitroPlugin((nitroApp) => {
     // Initial update
     updateSlowStats().then(updateFastStats)
 
-    // Start timers
+    let fastActionInterval: NodeJS.Timeout | null = null
+
     setInterval(updateSlowStats, 60000)
-    setInterval(updateFastStats, 2000)
+
+    setInterval(() => {
+        if (statsCache.activeListeners > 0) {
+            if (!fastActionInterval) {
+                console.log('[StatsPoller] Client connected, starting fast polling')
+                updateFastStats()
+                fastActionInterval = setInterval(updateFastStats, 2000)
+            }
+        } else {
+            if (fastActionInterval) {
+                console.log('[StatsPoller] No clients, stopping fast polling')
+                clearInterval(fastActionInterval)
+                fastActionInterval = null
+            }
+        }
+    }, 1000)
 })

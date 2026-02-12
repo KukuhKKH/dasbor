@@ -16,11 +16,20 @@ const currentMessage = ref(messages[0])
 onMounted(() => {
   let i = 0
   const interval = setInterval(() => {
+    if (!props.loading) {
+      clearInterval(interval)
+      return
+    }
+
     i = (i + 1) % messages.length
     if (i < messages.length) {
        currentMessage.value = messages[i]
     }
   }, 300)
+
+  watch(() => props.loading, (newVal) => {
+    if (!newVal) clearInterval(interval)
+  })
 
   onUnmounted(() => clearInterval(interval))
 })

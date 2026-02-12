@@ -32,10 +32,11 @@ const { data: containers, refresh } = await useFetch<Container[]>(
   },
 );
 
-// Auto refresh tiap 1 menit untuk stats live
 useIntervalFn(() => {
   refresh();
-}, 60000);
+}, 60000, {
+  immediateCallback: true,
+});
 
 const activeCount = computed(() => {
   return containers.value?.filter((c) => c.state === "running").length || 0;
