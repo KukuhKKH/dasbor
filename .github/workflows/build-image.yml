@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       force_build_base:
-        description: 'Force build base image'
+        description: "Force build base image"
         required: false
         default: false
         type: boolean
@@ -16,6 +16,10 @@ env:
   DOCKER_HUB: ghcr.io
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
 
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check-changes:
     runs-on: ubuntu-latest
@@ -23,6 +27,7 @@ jobs:
       base_changed: ${{ steps.check.outputs.base_changed }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -30,26 +35,30 @@ jobs:
             base:
               - '.gitlab-ci/base/**'
               - '.github/workflows/build-image.yml'
-      
+
       - name: Check if base needs update
         id: check
+        shell: bash
         run: |
-          if [[ "${{ github.event.inputs.force_build_base }}" == "true" || "${{ steps.filter.outputs.base }}" == "true" ]]; then
-            echo "base_changed=true" >> $GITHUB_OUTPUT
+          FORCE="${{ github.event.inputs.force_build_base }}"
+          FILTER="${{ steps.filter.outputs.base }}"
+
+          if [[ "$FORCE" == "true" || "$FILTER" == "true" ]]; then
+            echo "base_changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "base_changed=false" >> $GITHUB_OUTPUT
+            echo "base_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
   build-base:
     needs: check-changes
-    if: ${{ needs.check_changes.outputs.base_changed == 'true' }}
+    if: needs.check-changes.outputs.base_changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -58,18 +67,22 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Lowercase Image Namespace
+        shell: bash
         run: |
-          echo "IMAGE_NAMESPACE=${IMAGE_NAMESPACE,,}" >> $GITHUB_ENV
+          echo "IMAGE_NAMESPACE=${IMAGE_NAMESPACE,,}" >> "$GITHUB_ENV"
 
       - name: Pull Base Image (Quiet)
+        shell: bash
         run: |
           docker compose -f .gitlab-ci/base/docker-compose.yml pull --quiet || true
 
       - name: Build Base Image
+        shell: bash
         run: |
           docker compose -f .gitlab-ci/base/docker-compose.yml build
 
       - name: Push Base Image
+        shell: bash
         run: |
           docker compose -f .gitlab-ci/base/docker-compose.yml push
 
@@ -87,12 +100,11 @@ jobs:
         with:
           run_install: false
 
-
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          node-version: "22"
+          cache: "pnpm"
 
       - name: Install Dependencies
         run: pnpm install --no-frozen-lockfile
@@ -107,12 +119,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nuxt-output
-          path: .output/
+          path: .output
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
 
   build-release:
-    needs: [build-base, build-app]
+    needs: [ build-base, build-app ]
     if: always() && needs.build-app.result == 'success' && (needs.build-base.result == 'success' || needs.build-base.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
@@ -135,17 +148,21 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Lowercase Image Namespace
+        shell: bash
         run: |
-          echo "IMAGE_NAMESPACE=${IMAGE_NAMESPACE,,}" >> $GITHUB_ENV
+          echo "IMAGE_NAMESPACE=${IMAGE_NAMESPACE,,}" >> "$GITHUB_ENV"
 
       - name: Pull Release Image (Quiet)
+        shell: bash
         run: |
           docker compose -f .gitlab-ci/build/docker-compose.yml pull --quiet || true
 
       - name: Build Release Image
+        shell: bash
         run: |
           docker compose -f .gitlab-ci/build/docker-compose.yml build
 
       - name: Push Release Image
+        shell: bash
         run: |
           docker compose -f .gitlab-ci/build/docker-compose.yml push

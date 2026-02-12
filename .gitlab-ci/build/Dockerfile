@@ -1,3 +1,6 @@
+ARG DOCKER_HUB
+ARG IMAGE_NAMESPACE
+
 FROM ${DOCKER_HUB}/${IMAGE_NAMESPACE}/server-dashboard-base:latest
 
 WORKDIR /app

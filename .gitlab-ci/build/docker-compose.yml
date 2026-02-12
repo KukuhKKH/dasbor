@@ -6,4 +6,7 @@ services:
     build:
       context: ../..
       dockerfile: .gitlab-ci/build/Dockerfile
+      args:
+        DOCKER_HUB: ${DOCKER_HUB}
+        IMAGE_NAMESPACE: ${IMAGE_NAMESPACE}
       platforms: [ "linux/amd64" ]
