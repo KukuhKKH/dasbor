@@ -15,17 +15,16 @@ function formatBytes(bytes: number) {
 }
 
 // Helper: Bikin Path SVG untuk Grafik
-// Helper: Bikin Path SVG untuk Grafik
 function createPath(dataKey: 'rx' | 'tx', height: number) {
   // Ensure we have data
   if (!history.value || history.value.length < 2) return ''
   
+  // Find max value for scaling (min 10KB) - Calculate ONCE
+  const maxVal = Math.max(...history.value.map(v => v.network[dataKey]), 1024 * 10) 
+
   const points = history.value.map((h, i) => {
     // Map network rx/tx
     const val = h.network[dataKey]
-    
-    // Find max value for scaling (min 10KB)
-    const maxVal = Math.max(...history.value.map(v => v.network[dataKey]), 1024 * 10) 
     
     // Calculate X position (spread across 100%)
     const x = i * (100 / (history.value.length - 1))
