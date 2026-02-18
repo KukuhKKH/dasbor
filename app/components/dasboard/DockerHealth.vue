@@ -21,6 +21,11 @@ interface Container {
     net_tx: number;
     blk_read: number;
     blk_write: number;
+    limits?: {
+      memory: number;
+      memory_reservation: number;
+      cpu: number;
+    };
   };
 }
 
@@ -278,11 +283,18 @@ async function executeAction(id: string, action: string) {
               v-if="c.state === 'running'"
               class="grid grid-cols-2 gap-4 pt-1 border-t border-primary/5"
             >
+              <!-- CPU Section -->
               <div class="space-y-1.5">
                 <div
                   class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80"
                 >
-                  <span>CPU</span>
+                  <div class="flex items-center gap-1">
+                    <span>CPU</span>
+                    <span v-if="c.stats.limits?.cpu" class="text-[8px] font-normal opacity-70 normal-case bg-primary/5 px-1 rounded">
+                      Max {{ c.stats.limits.cpu }}
+                    </span>
+                    <Icon v-else name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No CPU Limit Set" />
+                  </div>
                   <span class="text-primary">{{ c.stats.cpu_percent }}%</span>
                 </div>
                 <div
@@ -294,14 +306,17 @@ async function executeAction(id: string, action: string) {
                   />
                 </div>
               </div>
+
+              <!-- Memory Section -->
               <div class="space-y-1.5">
                 <div
                   class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80"
                 >
-                  <span>RAM</span>
-                  <span class="text-purple-400">{{
-                    formatBytes(c.stats.mem_usage)
-                  }}</span>
+                  <div class="flex items-center gap-1">
+                    <span>RAM</span>
+                    <Icon v-if="!c.stats.limits?.memory" name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No Memory Limit Set" />
+                  </div>
+                  <span class="text-purple-400">{{ formatBytes(c.stats.mem_usage) }}</span>
                 </div>
                 <div
                   class="h-1 w-full bg-purple-500/10 rounded-full overflow-hidden"
@@ -311,13 +326,23 @@ async function executeAction(id: string, action: string) {
                     :style="{ width: `${c.stats.mem_percent}%` }"
                   />
                 </div>
+                
+                <!-- Memory Limits Details -->
+                <div class="flex items-center justify-between text-[8px] text-muted-foreground/60 font-medium">
+                   <span>
+                     Min: {{ c.stats.limits?.memory_reservation ? formatBytes(c.stats.limits.memory_reservation) : '-' }}
+                   </span>
+                   <span :class="{'text-amber-500/80': !c.stats.limits?.memory}">
+                     Max: {{ c.stats.limits?.memory ? formatBytes(c.stats.limits.memory) : 'Host (Unsafe)' }}
+                   </span>
+                </div>
               </div>
             </div>
 
             <!-- Network Minimal Stats -->
             <div
               v-if="c.state === 'running'"
-              class="flex items-center justify-between text-[9px] text-muted-foreground/50 font-mono"
+              class="flex items-center justify-between text-[9px] text-muted-foreground/50 font-mono pt-1"
             >
               <div class="flex items-center gap-1">
                 <Icon name="i-lucide-arrow-down" class="size-2.5" />
