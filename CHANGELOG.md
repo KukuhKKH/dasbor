@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.4.1] — 2026-02-20
+
+### 📱 Mobile UX
+
+#### `app/components/dasboard/MiniPlayer.vue`
+
+- **Touch seek progress bar** — Tambah handler `touchmove` + `touchend` pada progress bar. `touch-action: none` diterapkan agar browser tidak menginterupsi gesture sebagai scroll halaman. Progress bar kini bisa di-drag dengan jari secara real-time.
+- **Knob indikator posisi** — Elemen bulat muncul saat hover/aktif untuk menunjukkan posisi yang bisa diinteraksi.
+- **Volume control di mobile** — Row volume (`Slider`) kini muncul khusus di bawah progress bar pada layar `< sm`, menggantikan kontrol yang sebelumnya tersembunyi sepenuhnya (`hidden sm:flex`).
+- **Touch target standar** — Tombol skip diberi `min-h/w-[44px]`, tombol play diperbesar ke `size-14`, item playlist `min-h-[44px]` — memenuhi standar Apple HIG & Google Material 44px minimum.
+- **Playlist height adaptif** — Dari `max-h-[240px]` fixed → `max-h-[40dvh]` dinamis terhadap tinggi layar, aman saat keyboard mobile muncul.
+
+#### `app/components/dasboard/DockerHealth.vue`
+
+- **Filter chip scroll horizontal** — Tambah `overflow-x-auto` + `shrink-0` agar chip tidak meluber di layar sempit, bisa di-scroll secara horizontal.
+- **Actions button diperbesar** — Dari `h-6 w-6` (24px) → `h-9 w-9` (36px), lebih mudah dipencet dengan jari.
+- **Dropdown menu item touch target** — Tambah `py-2.5` eksplisit pada setiap `DropdownMenuItem`.
+- **TransitionGroup animasi** — Daftar container animasi fade + slide saat filter atau search berubah, menghilangkan efek "jentit" tiba-tiba.
+- **Progress bar lebih tebal** — `h-1` → `h-1.5` agar lebih mudah terlihat di layar kecil.
+
+#### `app/components/dasboard/ServerMonitor.vue`
+
+- **Tombol "Sync Now" touch target** — Tambah `min-h-[44px]` agar memenuhi standar minimum touch target.
+- **Responsive font stats** — `text-2xl` → `text-xl md:text-2xl` agar tidak terlalu besar saat 4 stat stacked 1 kolom di mobile portrait.
+
+---
+
+## [1.4.0] — 2026-02-20
+
+### ✨ Features
+
+#### `app/components/dasboard/MiniPlayer.vue` — Playlist Management
+
+- **Panel playlist collapsible** — Tombol `i-lucide-list-music` di header membuka/menutup panel dengan animasi `Transition` (max-height + opacity). Badge merah menampilkan total jumlah lagu.
+- **Search lagu** — Input search real-time memfilter daftar berdasarkan judul atau nama artist.
+- **Klik langsung untuk putar** — Setiap baris lagu dapat diklik untuk langsung mengganti dan memutar lagu tersebut.
+- **Highlight lagu aktif** — Border kiri berwarna primary + teks biru pada lagu yang sedang diputar.
+- **Equalizer animasi** — Tiga bar animating bounce saat lagu diputar; diam saat pause.
+- **Nomor track & durasi** — Tiap item menampilkan nomor urut dan durasi lagu (dari field `duration` API).
+- **Counter posisi** — Footer panel menampilkan posisi lagu aktif dalam format `#2 / 12`.
+
+#### `app/components/dasboard/DockerHealth.vue` — Search & Filter Container
+
+- **Search real-time** — Input memfilter daftar container berdasarkan nama atau image secara instan.
+- **Filter chip by state** — 4 chip: All / Running / Exited / Restarting. Search dan filter dapat dikombinasikan.
+- **Badge count** — Setiap chip menampilkan jumlah container dengan state tersebut.
+- **Empty state saat hasil kosong** — Tampilan khusus "Tidak ada hasil" dengan tombol Reset filter.
+- **Info bar saat filter aktif** — Teks "Menampilkan X dari Y container" + tombol Reset kecil muncul saat filter aktif.
+
+---
+
 ## [1.3.1] — 2026-02-20
 
 ### 🐛 Bug Fixes

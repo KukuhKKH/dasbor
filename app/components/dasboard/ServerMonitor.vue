@@ -54,7 +54,7 @@ function formatUptime(seconds: number) {
       <Button
         variant="outline"
         size="sm"
-        class="rounded-full px-4 hover:bg-primary hover:text-primary-foreground transition-all duration-300"
+        class="rounded-full px-4 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-all duration-300"
         @click="refresh()"
       >
         <Icon name="i-lucide-refresh-cw" class="mr-2 size-4" />
@@ -71,7 +71,7 @@ function formatUptime(seconds: number) {
           >
             Server Uptime
           </span>
-          <span class="text-2xl font-bold tabular-nums text-primary">
+          <span class="text-xl md:text-2xl font-bold tabular-nums text-primary">
             {{ data?.uptime ? formatUptime(uptimeSeconds) : "---" }}
           </span>
           <span class="text-[10px] text-muted-foreground italic">
@@ -91,7 +91,7 @@ function formatUptime(seconds: number) {
             Network Latency
           </span>
           <div class="flex items-baseline gap-1">
-            <span class="text-2xl font-bold tabular-nums text-primary">
+            <span class="text-xl md:text-2xl font-bold tabular-nums text-primary">
               {{ data?.network?.latency_ms ?? "---" }}
             </span>
             <span class="text-sm font-medium text-muted-foreground">ms</span>
