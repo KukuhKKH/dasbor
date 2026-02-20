@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useSystemStats } from '~/composables/useSystemStats'
+import { useSystemStats, type StatsHistory } from '~/composables/useSystemStats'
 
 // Local history is now handled by composable
 const { data, history, error, status } = useSystemStats()
@@ -19,10 +19,12 @@ function createPath(dataKey: 'rx' | 'tx', height: number) {
   // Ensure we have data
   if (!history.value || history.value.length < 2) return ''
   
-  // Find max value for scaling (min 10KB) - Calculate ONCE
-  const maxVal = Math.max(...history.value.map(v => v.network[dataKey]), 1024 * 10) 
+  const maxVal = history.value.reduce(
+    (max: number, v: StatsHistory) => Math.max(max, v.network[dataKey]),
+    1024 * 10 // minimum 10KB agar grafik tidak flat
+  )
 
-  const points = history.value.map((h, i) => {
+  const points = history.value.map((h: StatsHistory, i: number) => {
     // Map network rx/tx
     const val = h.network[dataKey]
     
