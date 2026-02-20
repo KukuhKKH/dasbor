@@ -38,13 +38,17 @@ export function useSystemStats() {
     const error = ref<Error | null>(null)
     const status = ref<'connecting' | 'connected' | 'error' | 'offline'>('connecting')
     let eventSource: EventSource | null = null
-    let pollInterval: any = null
+    let pollInterval: ReturnType<typeof setInterval> | null = null
+
+    // ----- FIX: Exponential backoff dengan batas retry maksimum -----
+    let retryCount = 0
+    const MAX_RETRIES = 10
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null
 
     const fetchStats = async () => {
         try {
             const res = await $fetch<{ stats: SystemStats, history: any[] }>('/api/stats')
             data.value = res.stats
-            // Transform history to lighter structure if needed, or pass directly
             history.value = res.history.map((h: any) => ({
                 network: h.network,
                 timestamp: h.timestamp
@@ -76,6 +80,8 @@ export function useSystemStats() {
             eventSource.onopen = () => {
                 status.value = 'connected'
                 error.value = null
+                // ----- FIX: Reset retry counter saat berhasil konek -----
+                retryCount = 0
             }
 
             eventSource.onmessage = (event) => {
@@ -101,9 +107,24 @@ export function useSystemStats() {
 
             eventSource.onerror = (e) => {
                 console.error('SSE Error:', e)
-                status.value = 'error'
                 eventSource?.close()
-                setTimeout(connectSSE, 5000)
+                eventSource = null
+
+                // ----- FIX: Henti retry jika sudah melewati batas maksimum -----
+                if (retryCount >= MAX_RETRIES) {
+                    console.warn(`SSE: Reached max retries (${MAX_RETRIES}). Giving up.`)
+                    status.value = 'offline'
+                    return
+                }
+
+                status.value = 'error'
+
+                // ----- FIX: Exponential backoff — delay 1s, 2s, 4s, 8s, ..., maks 30s -----
+                const delay = Math.min(1000 * 2 ** retryCount, 30_000)
+                console.warn(`SSE: Reconnecting in ${delay / 1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})...`)
+                retryCount++
+
+                retryTimeout = setTimeout(connectSSE, delay)
             }
         })
     }
@@ -120,6 +141,11 @@ export function useSystemStats() {
         if (pollInterval) {
             clearInterval(pollInterval)
             pollInterval = null
+        }
+        // ----- FIX: Bersihkan retry timeout agar tidak reconnect setelah unmount -----
+        if (retryTimeout) {
+            clearTimeout(retryTimeout)
+            retryTimeout = null
         }
     })
 

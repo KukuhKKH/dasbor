@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useIntervalFn } from "@vueuse/core";
-
 import { toast } from 'vue-sonner'
 
 interface Container {
@@ -29,6 +28,10 @@ interface Container {
   };
 }
 
+type PendingAction =
+  | { type: 'action'; id: string; action: string }
+  | { type: 'logs'; id: string; name: string }
+
 const { data: containers, refresh } = await useFetch<Container[]>(
   "/api/docker/containers",
   {
@@ -39,38 +42,20 @@ const { data: containers, refresh } = await useFetch<Container[]>(
 
 useIntervalFn(() => {
   refresh();
-}, 60000, {
-  immediateCallback: true,
-});
+}, 60000);
 
 const activeCount = computed(() => {
   return containers.value?.filter((c) => c.state === "running").length || 0;
 });
 
-function getStateColor(state: string) {
-  switch (state) {
-    case "running":
-      return "bg-emerald-500";
-    case "exited":
-      return "bg-slate-500";
-    case "restarting":
-      return "bg-amber-500";
-    default:
-      return "bg-red-500";
-  }
-}
+const STATE_STYLES: Record<string, { dot: string; ring: string }> = {
+  running:    { dot: "bg-emerald-500", ring: "ring-emerald-500/30" },
+  exited:     { dot: "bg-slate-500",   ring: "ring-slate-500/30" },
+  restarting: { dot: "bg-amber-500",   ring: "ring-amber-500/30" },
+};
 
-function getStateRingColor(state: string) {
-  switch (state) {
-    case "running":
-      return "ring-emerald-500/30";
-    case "exited":
-      return "ring-slate-500/30";
-    case "restarting":
-      return "ring-amber-500/30";
-    default:
-      return "ring-red-500/30";
-  }
+function getStateStyle(state: string) {
+  return STATE_STYLES[state] ?? { dot: "bg-red-500", ring: "ring-red-500/30" };
 }
 
 function getStack(c: Container) {
@@ -87,14 +72,14 @@ function formatBytes(bytes: number) {
 
 // Actions & Auth
 const authOpen = ref(false)
-const pendingAction = ref<{ id: string, action: string } | null>(null)
+const pendingAction = ref<PendingAction | null>(null)
 const isAuthenticated = useCookie('docker_is_authenticated')
 
 function handleAction(id: string, action: string) {
   if (isAuthenticated.value) {
     executeAction(id, action)
   } else {
-    pendingAction.value = { id, action }
+    pendingAction.value = { type: 'action', id, action }
     authOpen.value = true
   }
 }
@@ -108,23 +93,19 @@ function handleViewLogs(c: Container) {
     selectedContainer.value = { id: c.id, name: c.name }
     logsOpen.value = true
   } else {
-    // pendingAction usually stores {id, action}, let's overload it or make a new state?
-    // Let's use a specific "view_logs" action string
-    pendingAction.value = { id: c.id, action: 'view_logs:' + c.name }
+    // ----- FIX: Simpan id & name secara terpisah, tidak di-encode ke string -----
+    pendingAction.value = { type: 'logs', id: c.id, name: c.name }
     authOpen.value = true
   }
 }
 
 function onAuthenticated() {
   if (pendingAction.value) {
-    if (pendingAction.value.action.startsWith('view_logs:')) {
-       // It was a logs request
-       const name = pendingAction.value.action.split(':')[1]
-       selectedContainer.value = { id: pendingAction.value.id, name }
-       logsOpen.value = true
+    if (pendingAction.value.type === 'logs') {
+      selectedContainer.value = { id: pendingAction.value.id, name: pendingAction.value.name }
+      logsOpen.value = true
     } else {
-       // Regular action
-       executeAction(pendingAction.value.id, pendingAction.value.action)
+      executeAction(pendingAction.value.id, pendingAction.value.action)
     }
     pendingAction.value = null
   }
@@ -132,12 +113,12 @@ function onAuthenticated() {
 
 async function executeAction(id: string, action: string) {
   try {
-     toast.info(`Executing ${action}...`)
-     await $fetch(`/api/docker/${id}/${action}`, { method: 'POST' })
-     toast.success(`Container ${action}ed successfully`)
-     refresh()
+    toast.info(`Executing ${action}...`)
+    await $fetch(`/api/docker/${id}/${action}`, { method: 'POST' })
+    toast.success(`Container ${action}ed successfully`)
+    refresh()
   } catch (e: any) {
-     toast.error(e.data?.statusMessage || `Failed to ${action} container`)
+    toast.error(e.data?.statusMessage || `Failed to ${action} container`)
   }
 }
 </script>
@@ -152,7 +133,7 @@ async function executeAction(id: string, action: string) {
           Docker Health
         </CardTitle>
         <CardDescription class="text-sm text-muted-foreground">
-          Container status & live metrics
+          Container status &amp; live metrics
         </CardDescription>
       </div>
       <div class="flex items-center gap-2">
@@ -212,14 +193,14 @@ async function executeAction(id: string, action: string) {
           <div class="flex flex-col p-3 gap-3">
             <!-- Top info -->
             <div class="flex items-center gap-3">
-              <!-- Status Indicator -->
+              <!-- Status Indicator — FIX: pakai getStateStyle() tunggal -->
               <div
                 class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background/50 ring-1"
-                :class="getStateRingColor(c.state)"
+                :class="getStateStyle(c.state).ring"
               >
                 <div
                   class="h-2 w-2 rounded-full"
-                  :class="getStateColor(c.state)"
+                  :class="getStateStyle(c.state).dot"
                 />
               </div>
 

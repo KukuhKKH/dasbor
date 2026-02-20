@@ -26,60 +26,34 @@ const duration = ref("0:00");
 
 // Init
 if (playlist.value && playlist.value.length > 0) {
-  currentSong.value = playlist.value[0];
+  currentSong.value = playlist.value[0]!;
 }
 
-// Actions
-function togglePlay() {
-  if (!audioRef.value) {
-    return;
-  }
+async function togglePlay() {
+  if (!audioRef.value) return;
 
   if (isPlaying.value) {
     audioRef.value.pause();
+    isPlaying.value = false;
   } else {
-    audioRef.value.play();
+    try {
+      await audioRef.value.play();
+      isPlaying.value = true;
+    } catch {
+      isPlaying.value = false;
+    }
   }
-
-  isPlaying.value = !isPlaying.value;
 }
 
-function nextSong() {
-  if (!playlist.value || !currentSong.value) {
-    return;
-  }
+function skipTo(direction: 1 | -1) {
+  if (!playlist.value || !currentSong.value) return;
 
   const idx = playlist.value.findIndex(
-    (s) => s.filename === currentSong.value?.filename
+    (s: Song) => s.filename === currentSong.value?.filename
   );
-  const nextIdx = (idx + 1) % playlist.value.length;
-  currentSong.value = playlist.value[nextIdx];
+  const newIdx = (idx + direction + playlist.value.length) % playlist.value.length;
+  currentSong.value = playlist.value[newIdx]!;
   isPlaying.value = true;
-  setTimeout(() => {
-    if (audioRef.value) {
-      audioRef.value.volume = volume.value[0] / 100;
-      audioRef.value.play();
-    }
-  }, 100);
-}
-
-function prevSong() {
-  if (!playlist.value || !currentSong.value) {
-    return;
-  }
-
-  const idx = playlist.value.findIndex(
-    (s) => s.filename === currentSong.value?.filename
-  );
-  const prevIdx = (idx - 1 + playlist.value.length) % playlist.value.length;
-  currentSong.value = playlist.value[prevIdx];
-  isPlaying.value = true;
-  setTimeout(() => {
-    if (audioRef.value) {
-      audioRef.value.volume = volume.value[0] / 100;
-      audioRef.value.play();
-    }
-  }, 100);
 }
 
 // Time Formatting Helper
@@ -100,11 +74,11 @@ function onTimeUpdate() {
   }
 }
 
-function onVolumeChange(val: number[]) {
+watch(volume, (newVal: number[]) => {
   if (audioRef.value) {
-    audioRef.value.volume = val[0] / 100;
+    audioRef.value.volume = newVal[0]! / 100;
   }
-}
+});
 
 function seek(e: MouseEvent) {
   const bar = e.currentTarget as HTMLElement;
@@ -116,11 +90,14 @@ function seek(e: MouseEvent) {
   }
 }
 
-watch(volume, (newVal) => {
-  if (audioRef.value) {
-    audioRef.value.volume = newVal[0] / 100;
+function onCanPlay() {
+  if (isPlaying.value && audioRef.value) {
+    audioRef.value.volume = volume.value[0]! / 100;
+    audioRef.value.play().catch(() => {
+      isPlaying.value = false;
+    });
   }
-});
+}
 </script>
 
 <template>
@@ -147,7 +124,6 @@ watch(volume, (newVal) => {
             :max="100"
             :step="1"
             class="w-24"
-            @update:model-value="onVolumeChange"
           />
         </div>
       </div>
@@ -161,7 +137,7 @@ watch(volume, (newVal) => {
             variant="ghost"
             size="icon"
             class="rounded-full text-muted-foreground hover:text-primary transition-colors"
-            @click="prevSong"
+            @click="skipTo(-1)"
           >
             <Icon name="i-lucide-skip-back" class="size-5" />
           </Button>
@@ -182,7 +158,7 @@ watch(volume, (newVal) => {
             variant="ghost"
             size="icon"
             class="rounded-full text-muted-foreground hover:text-primary transition-colors"
-            @click="nextSong"
+            @click="skipTo(1)"
           >
             <Icon name="i-lucide-skip-forward" class="size-5" />
           </Button>
@@ -232,8 +208,9 @@ watch(volume, (newVal) => {
       ref="audioRef"
       :src="currentSong?.streamUrl"
       @timeupdate="onTimeUpdate"
-      @ended="nextSong"
+      @ended="skipTo(1)"
       @loadedmetadata="onTimeUpdate"
+      @canplay="onCanPlay"
     />
   </Card>
 </template>
