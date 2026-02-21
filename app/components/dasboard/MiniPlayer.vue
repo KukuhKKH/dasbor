@@ -109,11 +109,11 @@ watch(volume, (newVal: number[]) => {
 
 // --- FIX: Unified seek handler untuk mouse DAN touch ---
 function getSeekProgress(e: MouseEvent | TouchEvent, bar: HTMLElement): number {
-  const rect = bar.getBoundingClientRect();
-  const clientX = e instanceof TouchEvent
-    ? e.touches[0]?.clientX ?? e.changedTouches[0]?.clientX ?? 0
-    : e.clientX;
-  return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const rect = bar.getBoundingClientRect()
+  const clientX = 'touches' in e
+    ? (e.touches[0]?.clientX ?? (e as TouchEvent).changedTouches[0]?.clientX ?? 0)
+    : (e as MouseEvent).clientX
+  return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
 }
 
 function seek(e: MouseEvent | TouchEvent) {
