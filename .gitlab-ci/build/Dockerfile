@@ -10,7 +10,6 @@ COPY .output ./.output
 WORKDIR /app/.output/server
 
 RUN apk add --no-cache --virtual .build-deps python3 make g++ \
-    && npm install -g npm@11.9.0 \
     && npm install --omit=dev --no-audit --no-fund \
     && apk del .build-deps
 
