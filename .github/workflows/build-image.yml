@@ -178,6 +178,7 @@ jobs:
 
   deploy:
     needs: build-release
+    if: needs.build-release.result == 'success'
     runs-on: self-hosted
     environment:
       name: production
