@@ -28,14 +28,16 @@ async function handleSubmit() {
       body: { password: password.value }
     })
     
-    // Success
+    const authCookie = useCookie('docker_is_authenticated')
+    authCookie.value = 'true'
+
     isOpen.value = false
     emit('authenticated')
-    password.value = '' // clear password
   } catch (e: any) {
     error.value = e.data?.statusMessage || 'Invalid password'
   } finally {
     loading.value = false
+    password.value = ''
   }
 }
 </script>
