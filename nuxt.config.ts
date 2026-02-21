@@ -16,6 +16,7 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    dockerControlPassword: env.DOCKER_CONTROL_PASSWORD || '',
     musicApi: {
       baseUrl: env.MUSIC_API_BASE || 'http://localhost:3000',
       placeholderUrl: env.MUSIC_API_PLACEHOLDER_URL || 'https://placehold.co/400?text=No+Cover&bg=1e293b&fg=ffffff',
