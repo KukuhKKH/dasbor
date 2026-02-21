@@ -155,17 +155,21 @@ jobs:
       - name: Build and Push Release Image
         shell: bash
         run: |
-          # Kalkulasi lokal karena GITHUB_ENV tidak dishare antar job
+          # Wajib lowercase untuk docker repository name
           NS_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
 
+          # Export agar docker commands bisa melihat nilai lowercase ini
+          export IMAGE_NAMESPACE="$NS_LOWER"
+          export DOCKER_HUB="ghcr.io"
+
           echo "Building: $NS_LOWER, SHA: $SHA_SHORT"
 
-          # Build & Push :latest
-          IMAGE_NAMESPACE="$NS_LOWER" docker compose -f .gitlab-ci/build/docker-compose.yml build
-          IMAGE_NAMESPACE="$NS_LOWER" docker compose -f .gitlab-ci/build/docker-compose.yml push
+          # Build & Push :latest via compose
+          docker compose -f .gitlab-ci/build/docker-compose.yml build
+          docker compose -f .gitlab-ci/build/docker-compose.yml push
 
-          # Tag & Push SHA version
+          # Tag & Push SHA version (immutable)
           IMAGE_LATEST="ghcr.io/$NS_LOWER/server-dashboard:latest"
           IMAGE_SHA="ghcr.io/$NS_LOWER/server-dashboard:$SHA_SHORT"
 
@@ -188,16 +192,19 @@ jobs:
           STACK_NAME: ${{ vars.STACK_NAME }}
           COMPOSE_FILE: ${{ vars.DEPLOY_COMPOSE_PATH }}
         run: |
-          # Kalkulasi lokal
           NS_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           IMAGE="ghcr.io/$NS_LOWER/server-dashboard:$SHA_SHORT"
 
+          export IMAGE_NAMESPACE="$NS_LOWER"
+          export DOCKER_HUB="ghcr.io"
+
           echo "Deploying image: $IMAGE"
 
-          # Replace :latest (atau tag apapun) dengan SHA spesifik di compose file
           TEMP_COMPOSE=$(mktemp)
-          sed "s|ghcr.io/[^/]*/server-dashboard:[^ ]*|${IMAGE}|g" "$COMPOSE_FILE" > "$TEMP_COMPOSE"
+          cp "$COMPOSE_FILE" "$TEMP_COMPOSE"
+
+          sed -i "s|image:.*server-dashboard:.*|image: ${IMAGE}|g" "$TEMP_COMPOSE"
 
           # Deploy
           docker stack deploy \
