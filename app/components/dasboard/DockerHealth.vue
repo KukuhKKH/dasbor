@@ -32,7 +32,7 @@ type PendingAction =
   | { type: 'action'; id: string; action: string }
   | { type: 'logs'; id: string; name: string }
 
-type StateFilter = 'all' | 'running' | 'exited' | 'restarting'
+type StateFilter = 'all' | 'running' | 'exited' | 'restarting' | 'paused'
 
 const { data: containers, refresh } = await useFetch<Container[]>(
   "/api/docker/containers",
@@ -50,6 +50,7 @@ const STATE_FILTERS: { label: string; value: StateFilter }[] = [
   { label: "Running",    value: "running" },
   { label: "Exited",     value: "exited" },
   { label: "Restarting", value: "restarting" },
+  { label: "Paused",     value: "paused" },
 ]
 
 const filteredContainers = computed(() => {
@@ -73,6 +74,7 @@ const stateCounts = computed(() => {
     running:    all.filter(c => c.state === "running").length,
     exited:     all.filter(c => c.state === "exited").length,
     restarting: all.filter(c => c.state === "restarting").length,
+    paused:     all.filter(c => c.state === "paused").length,
   }
 })
 
@@ -84,6 +86,7 @@ const STATE_STYLES: Record<string, { dot: string; ring: string }> = {
   running:    { dot: "bg-emerald-500", ring: "ring-emerald-500/30" },
   exited:     { dot: "bg-slate-500",   ring: "ring-slate-500/30" },
   restarting: { dot: "bg-amber-500",   ring: "ring-amber-500/30" },
+  paused:     { dot: "bg-yellow-400",  ring: "ring-yellow-400/30" },
 };
 
 function getStateStyle(state: string) {
@@ -141,14 +144,82 @@ function onAuthenticated() {
   }
 }
 
-async function executeAction(id: string, action: string) {
+async function executeAction(id: string, action: string, opts?: Record<string, string>) {
   try {
     toast.info(`Executing ${action}...`)
-    await $fetch(`/api/docker/${id}/${action}`, { method: 'POST' })
+    const query = opts ? '?' + new URLSearchParams(opts).toString() : ''
+    await $fetch(`/api/docker/${id}/${action}${query}`, { method: 'POST' })
     toast.success(`Container ${action}ed successfully`)
     refresh()
   } catch (e: any) {
     toast.error(e.data?.statusMessage || `Failed to ${action} container`)
+  }
+}
+
+// Remove dialog
+const removeDialogOpen = ref(false)
+const containerToRemove = ref<{ id: string; name: string; running: boolean } | null>(null)
+
+function handleRemove(c: Container) {
+  if (isAuthenticated.value) {
+    containerToRemove.value = { id: c.id, name: c.name, running: c.state === 'running' }
+    removeDialogOpen.value = true
+  } else {
+    pendingAction.value = { type: 'action', id: c.id, action: 'remove' }
+    authOpen.value = true
+  }
+}
+
+async function confirmRemove(force = false) {
+  if (!containerToRemove.value) return
+  removeDialogOpen.value = false
+  await executeAction(containerToRemove.value.id, 'remove', force ? { force: 'true' } : undefined)
+  containerToRemove.value = null
+}
+
+// Redeploy (pull + swarm update / restart)
+const redeployingIds = ref<Set<string>>(new Set())
+
+function handleRedeploy(c: Container) {
+  if (isAuthenticated.value) {
+    executeRedeploy(c)
+  } else {
+    pendingAction.value = { type: 'action', id: c.id, action: 'redeploy' }
+    authOpen.value = true
+  }
+}
+
+async function executeRedeploy(c: Container) {
+  const isSwarm = !!c.labels?.['com.docker.swarm.service.id']
+
+  redeployingIds.value = new Set([...redeployingIds.value, c.id])
+
+  const strategyMsg = isSwarm
+    ? 'Pulling image & updating Swarm service...'
+    : 'Pulling image & restarting container...'
+
+  toast.info(strategyMsg, { duration: 20_000, id: `redeploy-${c.id}` })
+
+  try {
+    const result = await $fetch<{ success: boolean; strategy: string; image: string }>(
+      `/api/docker/${c.id}/redeploy`,
+      { method: 'POST' },
+    )
+
+    const doneMsg = result.strategy === 'swarm-service-update'
+      ? `✅ Service updated — rolling update started for ${c.name}`
+      : `✅ Redeployed — ${c.name} restarted with latest image`
+
+    toast.success(doneMsg, { id: `redeploy-${c.id}`, duration: 8_000 })
+    setTimeout(refresh, 3000) // delay sedikit agar container sempat start
+  } catch (e: any) {
+    toast.error(e.data?.statusMessage || `Redeploy failed for ${c.name}`, {
+      id: `redeploy-${c.id}`,
+    })
+  } finally {
+    const next = new Set(redeployingIds.value)
+    next.delete(c.id)
+    redeployingIds.value = next
   }
 }
 </script>
@@ -214,6 +285,7 @@ async function executeAction(id: string, action: string) {
               'bg-emerald-500': f.value === 'running',
               'bg-slate-400':   f.value === 'exited',
               'bg-amber-500':   f.value === 'restarting',
+              'bg-yellow-400':  f.value === 'paused',
             }"
           />
           {{ f.label }}
@@ -340,17 +412,60 @@ async function executeAction(id: string, action: string) {
                             View Logs
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleAction(c.id, 'start')" :disabled="c.state === 'running'">
+                          <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleAction(c.id, 'start')" :disabled="c.state === 'running' || c.state === 'paused'">
                             <Icon name="i-lucide-play" class="mr-2 size-4" />
                             Start
                           </DropdownMenuItem>
-                          <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleAction(c.id, 'stop')" :disabled="c.state !== 'running'">
+                          <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleAction(c.id, 'stop')" :disabled="c.state !== 'running' && c.state !== 'paused'">
                             <Icon name="i-lucide-square" class="mr-2 size-4" />
                             Stop
                           </DropdownMenuItem>
-                          <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleAction(c.id, 'restart')">
+                          <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleAction(c.id, 'restart')" :disabled="c.state !== 'running'">
                             <Icon name="i-lucide-rotate-cw" class="mr-2 size-4" />
                             Restart
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            v-if="c.state === 'running'"
+                            class="py-2.5 cursor-pointer text-yellow-500 focus:text-yellow-500"
+                            @click="handleAction(c.id, 'pause')"
+                          >
+                            <Icon name="i-lucide-pause" class="mr-2 size-4" />
+                            Pause
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            v-if="c.state === 'paused'"
+                            class="py-2.5 cursor-pointer text-emerald-500 focus:text-emerald-500"
+                            @click="handleAction(c.id, 'unpause')"
+                          >
+                            <Icon name="i-lucide-play-circle" class="mr-2 size-4" />
+                            Unpause
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            class="py-2.5 cursor-pointer text-sky-500 focus:text-sky-500"
+                            :disabled="redeployingIds.has(c.id)"
+                            @click="handleRedeploy(c)"
+                          >
+                            <Icon
+                              :name="redeployingIds.has(c.id) ? 'i-lucide-loader-2' : 'i-lucide-rocket'"
+                              class="mr-2 size-4"
+                              :class="{ 'animate-spin': redeployingIds.has(c.id) }"
+                            />
+                            <span>{{ redeployingIds.has(c.id) ? 'Deploying...' : 'Redeploy' }}</span>
+                            <span
+                              v-if="!redeployingIds.has(c.id)"
+                              class="ml-auto text-[8px] font-semibold px-1 py-0.5 rounded bg-sky-500/10 text-sky-400"
+                            >
+                              {{ c.labels?.['com.docker.swarm.service.id'] ? 'Swarm' : 'Restart' }}
+                            </span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            class="py-2.5 cursor-pointer text-destructive focus:text-destructive"
+                            @click="handleRemove(c)"
+                          >
+                            <Icon name="i-lucide-trash-2" class="mr-2 size-4" />
+                            Remove
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -435,5 +550,47 @@ async function executeAction(id: string, action: string) {
       :container-id="selectedContainer?.id || null"
       :container-name="selectedContainer?.name"
     />
+
+    <!-- Remove Confirmation Dialog -->
+    <AlertDialog v-model:open="removeDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle class="flex items-center gap-2 text-destructive">
+            <Icon name="i-lucide-trash-2" class="size-5" />
+            Remove Container
+          </AlertDialogTitle>
+          <AlertDialogDescription class="space-y-2">
+            <p>
+              Apakah kamu yakin ingin menghapus container
+              <span class="font-bold text-foreground">{{ containerToRemove?.name }}</span>?
+            </p>
+            <p v-if="containerToRemove?.running" class="flex items-center gap-1.5 text-amber-500 font-medium text-sm">
+              <Icon name="i-lucide-alert-triangle" class="size-4 shrink-0" />
+              Container sedang berjalan. Penghapusan paksa akan menghentikannya terlebih dahulu.
+            </p>
+            <p class="text-xs text-muted-foreground/70">Aksi ini tidak bisa dibatalkan.</p>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction
+            v-if="containerToRemove?.running"
+            class="bg-amber-500 hover:bg-amber-600 text-white"
+            @click="confirmRemove(true)"
+          >
+            <Icon name="i-lucide-zap" class="mr-1.5 size-4" />
+            Force Remove
+          </AlertDialogAction>
+          <AlertDialogAction
+            v-else
+            class="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            @click="confirmRemove(false)"
+          >
+            <Icon name="i-lucide-trash-2" class="mr-1.5 size-4" />
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </Card>
 </template>
