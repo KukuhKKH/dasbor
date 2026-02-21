@@ -55,7 +55,10 @@ export default defineNitroPlugin((nitroApp) => {
 
             const hostname = await getHostname()
             const rootFs = cachedFsSize.find((d: any) => d.mount === '/') || cachedFsSize[0]
-            const defaultNet = net.find(i => i.iface !== 'lo') || net[0]
+
+            // Filter interface aktif (bukan loopback)
+            const activeInterfaces = net.filter((i: any) => i.iface !== 'lo')
+            const defaultNet = activeInterfaces[0] || net[0]
 
             const stats: SystemStats = {
                 os: {
@@ -82,6 +85,12 @@ export default defineNitroPlugin((nitroApp) => {
                     rx_sec: defaultNet?.rx_sec || 0,
                     tx_sec: defaultNet?.tx_sec || 0,
                 },
+                interfaces: activeInterfaces.map((i: any) => ({
+                    iface: i.iface,
+                    rx_sec: Math.max(0, i.rx_sec || 0),
+                    tx_sec: Math.max(0, i.tx_sec || 0),
+                    operstate: i.operstate || 'unknown',
+                })),
                 timestamp: Date.now(),
             }
 
@@ -90,6 +99,7 @@ export default defineNitroPlugin((nitroApp) => {
             console.error('[StatsPoller] Failed to update fast stats:', e)
         }
     }
+
 
     // Initial update
     updateSlowStats().then(updateFastStats)

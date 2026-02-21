@@ -156,7 +156,41 @@ function createPath(dataKey: 'rx' | 'tx', height: number) {
                     />
                 </svg>
               </div>
+
+              <!-- Per-Interface Breakdown -->
+              <div
+                v-if="data.interfaces && data.interfaces.length > 1"
+                class="mt-3 pt-3 border-t border-primary/10 space-y-1.5"
+              >
+                <div class="text-[9px] uppercase tracking-widest font-bold text-muted-foreground/60 mb-2">Interfaces</div>
+                <div
+                  v-for="iface in data.interfaces"
+                  :key="iface.iface"
+                  class="flex items-center justify-between text-[10px] font-mono"
+                >
+                  <div class="flex items-center gap-1.5">
+                    <span
+                      class="h-1.5 w-1.5 rounded-full shrink-0"
+                      :class="iface.operstate === 'up' ? 'bg-emerald-500' : 'bg-slate-400'"
+                    />
+                    <span class="text-muted-foreground font-medium">{{ iface.iface }}</span>
+                    <span
+                      class="text-[8px] px-1 rounded font-semibold"
+                      :class="iface.operstate === 'up'
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-slate-500/10 text-slate-400'"
+                    >
+                      {{ iface.operstate }}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[9px]">
+                    <span class="text-emerald-400">↓ {{ formatBytes(iface.rx_sec) }}/s</span>
+                    <span class="text-blue-400">↑ {{ formatBytes(iface.tx_sec) }}/s</span>
+                  </div>
+                </div>
+              </div>
           </div>
+
         </div>
       </template>
 
