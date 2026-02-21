@@ -107,7 +107,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install Dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build App
         run: pnpm build
@@ -125,7 +125,7 @@ jobs:
           retention-days: 1
 
   build-release:
-    needs: [ build-base, build-app ]
+    needs: [build-base, build-app]
     if: always() && needs.build-app.result == 'success' && (needs.build-base.result == 'success' || needs.build-base.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
