@@ -174,8 +174,8 @@ jobs:
 
   deploy:
     needs: build-release
-    # Tanpa 'if', defaultnya adalah: jalan hanya jika 'needs' (build-release) sukses
-    runs-on: [self-hosted, linux, x64]
+    if: always() && (needs.build-release.result == 'success')
+    runs-on: self-hosted
     environment:
       name: production
       url: https://${{ vars.DOMAIN }}
