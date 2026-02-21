@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { Readable } from 'stream'
 import { sendStream } from 'h3'
 import { buildMusicApiUrl, buildMusicApiHeaders } from '../../utils/music'
@@ -6,9 +7,10 @@ const SUCCESS_STATUSES = new Set([200, 206])
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
-  const filename = query.file as string
+  const rawFilename = query.file as string
+  const filename = rawFilename ? path.basename(rawFilename) : ''
 
-  if (!filename || filename.includes('..')) {
+  if (!filename || filename !== rawFilename) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
   }
 
