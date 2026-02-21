@@ -128,7 +128,10 @@ jobs:
 
   build-release:
     needs: [build-base, build-app]
-    if: always() && needs.build-app.result == 'success' && (needs.build-base.result == 'success' || needs.build-base.result == 'skipped')
+    if: |
+      always() &&
+      needs.build-app.result == 'success' &&
+      (needs.build-base.result == 'success' || needs.build-base.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -149,37 +152,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Lowercase Image Namespace
+      - name: Build and Push Release Image
         shell: bash
         run: |
-          echo "IMAGE_NAMESPACE=${IMAGE_NAMESPACE,,}" >> "$GITHUB_ENV"
-          echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          # Kalkulasi lokal karena GITHUB_ENV tidak dishare antar job
+          NS_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
 
-      - name: Pull Release Image (Quiet)
-        shell: bash
-        run: |
-          docker compose -f .gitlab-ci/build/docker-compose.yml pull --quiet || true
+          echo "Building: $NS_LOWER, SHA: $SHA_SHORT"
 
-      - name: Build Release Image
-        shell: bash
-        run: |
-          docker compose -f .gitlab-ci/build/docker-compose.yml build
+          # Build & Push :latest
+          IMAGE_NAMESPACE="$NS_LOWER" docker compose -f .gitlab-ci/build/docker-compose.yml build
+          IMAGE_NAMESPACE="$NS_LOWER" docker compose -f .gitlab-ci/build/docker-compose.yml push
 
-      - name: Push Release Image
-        shell: bash
-        run: |
-          # Push :latest
-          docker compose -f .gitlab-ci/build/docker-compose.yml push
-          # Push :<short-sha> sebagai immutable tag
-          docker tag \
-            ghcr.io/${IMAGE_NAMESPACE}/server-dashboard:latest \
-            ghcr.io/${IMAGE_NAMESPACE}/server-dashboard:${SHORT_SHA}
-          docker push ghcr.io/${IMAGE_NAMESPACE}/server-dashboard:${SHORT_SHA}
+          # Tag & Push SHA version
+          IMAGE_LATEST="ghcr.io/$NS_LOWER/server-dashboard:latest"
+          IMAGE_SHA="ghcr.io/$NS_LOWER/server-dashboard:$SHA_SHORT"
+
+          docker tag "$IMAGE_LATEST" "$IMAGE_SHA"
+          docker push "$IMAGE_SHA"
 
   deploy:
     needs: build-release
-    if: needs.build-release.result == 'success'
-    runs-on: self-hosted
+    # Tanpa 'if', defaultnya adalah: jalan hanya jika 'needs' (build-release) sukses
+    runs-on: [self-hosted, linux, x64]
     environment:
       name: production
       url: https://${{ vars.DOMAIN }}
@@ -189,18 +185,21 @@ jobs:
 
       - name: Deploy Stack
         env:
-          IMAGE_NAMESPACE: ${{ env.IMAGE_NAMESPACE }}
           STACK_NAME: ${{ vars.STACK_NAME }}
           COMPOSE_FILE: ${{ vars.DEPLOY_COMPOSE_PATH }}
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          IMAGE="ghcr.io/${IMAGE_NAMESPACE,,}/server-dashboard:${SHORT_SHA}"
+          # Kalkulasi lokal
+          NS_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE="ghcr.io/$NS_LOWER/server-dashboard:$SHA_SHORT"
 
           echo "Deploying image: $IMAGE"
 
+          # Replace :latest (atau tag apapun) dengan SHA spesifik di compose file
           TEMP_COMPOSE=$(mktemp)
           sed "s|ghcr.io/[^/]*/server-dashboard:[^ ]*|${IMAGE}|g" "$COMPOSE_FILE" > "$TEMP_COMPOSE"
 
+          # Deploy
           docker stack deploy \
             --with-registry-auth \
             --resolve-image always \
