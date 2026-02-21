@@ -153,6 +153,7 @@ jobs:
         shell: bash
         run: |
           echo "IMAGE_NAMESPACE=${IMAGE_NAMESPACE,,}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Pull Release Image (Quiet)
         shell: bash
@@ -167,4 +168,42 @@ jobs:
       - name: Push Release Image
         shell: bash
         run: |
+          # Push :latest
           docker compose -f .gitlab-ci/build/docker-compose.yml push
+          # Push :<short-sha> sebagai immutable tag
+          docker tag \
+            ghcr.io/${IMAGE_NAMESPACE}/server-dashboard:latest \
+            ghcr.io/${IMAGE_NAMESPACE}/server-dashboard:${SHORT_SHA}
+          docker push ghcr.io/${IMAGE_NAMESPACE}/server-dashboard:${SHORT_SHA}
+
+  deploy:
+    needs: build-release
+    runs-on: self-hosted
+    environment:
+      name: production
+      url: https://${{ vars.DOMAIN }}
+    steps:
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Deploy Stack
+        env:
+          IMAGE_NAMESPACE: ${{ env.IMAGE_NAMESPACE }}
+          STACK_NAME: ${{ vars.STACK_NAME }}
+          COMPOSE_FILE: ${{ vars.DEPLOY_COMPOSE_PATH }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE="ghcr.io/${IMAGE_NAMESPACE,,}/server-dashboard:${SHORT_SHA}"
+
+          echo "Deploying image: $IMAGE"
+
+          TEMP_COMPOSE=$(mktemp)
+          sed "s|ghcr.io/[^/]*/server-dashboard:[^ ]*|${IMAGE}|g" "$COMPOSE_FILE" > "$TEMP_COMPOSE"
+
+          docker stack deploy \
+            --with-registry-auth \
+            --resolve-image always \
+            -c "$TEMP_COMPOSE" \
+            "$STACK_NAME"
+
+          rm -f "$TEMP_COMPOSE"
