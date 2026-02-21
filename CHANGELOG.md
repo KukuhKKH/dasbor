@@ -4,6 +4,107 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.5.0] — 2026-02-21
+
+### 🔒 Security
+
+#### `server/utils/docker-auth.ts` _(baru)_
+
+- **Signed HMAC token** — Cookie `docker_auth_token` tidak lagi berisi string statis `"valid"`. Diganti dengan token format `v1.<timestamp>.<hmac-sha256>` yang di-sign menggunakan password sebagai secret. Verifikasi menggunakan `timingSafeEqual` untuk mencegah timing attack.
+
+#### `server/utils/rate-limit.ts`
+
+- **Rate limiter dengan factory function** — Refactor `checkRateLimit` menjadi `createRateLimiter(limit, windowMs)` yang membuat store independen per use case. Tambah `retryAfterMs()` helper.
+
+#### `server/middleware/docker-rate-limit.ts` _(baru)_
+
+- **Global rate limiting middleware** — Semua request ke `/api/docker/**` dibatasi 60 req/menit per IP. Response menyertakan header `Retry-After`, `X-RateLimit-Limit`, dan `X-RateLimit-Reset`.
+
+#### `server/api/docker/auth.post.ts`
+
+- **Rate limiting login** — Endpoint auth dibatasi 10 request/menit per IP untuk mencegah brute-force.
+- **`sameSite: 'strict'`** — Cookie auth ditambah atribut `sameSite: 'strict'`.
+- **Password via `runtimeConfig`** — `DOCKER_CONTROL_PASSWORD` kini diregistrasi ke Nuxt `runtimeConfig` (sebelumnya dibaca langsung dari `process.env`).
+
+#### `server/api/docker/[id]/[action].post.ts`
+
+- **Validasi container ID** — ID harus berupa hex 12–64 karakter (`/^[a-f0-9]{12,64}$/i`). Request dengan ID tidak valid langsung ditolak 400.
+- **Whitelist aksi via `Set`** — Hanya aksi yang terdaftar di `ALLOWED_ACTIONS` yang diterima.
+
+#### `server/api/docker/[id]/logs.get.ts`
+
+- **Validasi container ID** — Sama seperti action endpoint.
+- **Clamp parameter `tail`** — Nilai `tail` dibatasi antara 1–5000 (sebelumnya tidak ada batas, bisa menyebabkan OOM).
+
+#### `server/api/music/cover.get.ts` & `stream.get.ts`
+
+- **Sanitasi filename via `path.basename()`** — Pengecekan `includes('..')` yang tidak lengkap diganti dengan `path.basename()` untuk mencegah semua variasi path traversal.
+
+#### `nuxt.config.ts`
+
+- **`dockerControlPassword` di `runtimeConfig`** — Secret dikelola konsisten oleh Nuxt, tidak lagi dibaca langsung dari `process.env` di handler.
+
+#### `app/components/DockerAuthModal.vue`
+
+- **Fix: Auth modal muncul kembali setelah login** — `useCookie` ref tidak otomatis update saat server set cookie via `Set-Cookie` header. Kini setelah login sukses, cookie ref di-update secara eksplisit di client sehingga state langsung sinkron tanpa perlu refresh.
+
+---
+
+### ✨ Features
+
+#### `server/api/docker/[id]/[action].post.ts`
+
+- **Pause & Unpause** — Container yang sedang berjalan dapat di-pause (suspended tanpa dihentikan). State `paused` terdeteksi sebelum aksi dieksekusi.
+- **Remove** — Container dapat dihapus. Jika container sedang berjalan, wajib menyertakan `?force=true`. State divalidasi via `container.inspect()` sebelum eksekusi.
+
+#### `server/api/docker/[id]/redeploy.post.ts` _(baru)_
+
+- **One-click Redeploy** — Pull image terbaru dari registry, lalu:
+  - **Docker Swarm service** (terdeteksi dari label `com.docker.swarm.service.id`): force update service via `service.update()` dengan increment `ForceUpdate` counter → rolling update zero-downtime.
+  - **Standalone container**: restart container dengan image baru.
+
+#### `server/utils/stats-cache.ts`
+
+- **Alert System** — `_checkAlerts()` memeriksa threshold CPU (warning 85% / critical 95%), Memory (80% / 90%), Storage (85% / 95%). Alert di-emit sebagai event tersendiri (`'alert'`) dengan cooldown 5 menit per tipe agar tidak spam.
+- **Per-interface network data** — `SystemStats` kini menyertakan field `interfaces[]` dengan `iface`, `rx_sec`, `tx_sec`, `operstate` untuk setiap interface aktif (non-loopback).
+
+#### `server/api/stats/stream.get.ts`
+
+- **Typed SSE events** — Event stream kini menggunakan named event types: `event: stats` untuk data sistem dan `event: alert` untuk notifikasi threshold.
+
+#### `app/composables/useSystemStats.ts`
+
+- **Alert toast** — `addEventListener('alert')` menangkap alert dari SSE dan menampilkan toast via `vue-sonner`: warning (kuning, 7 detik) dan critical (merah, 10 detik).
+
+#### `app/components/dasboard/DockerHealth.vue`
+
+- **Filter chip "Paused"** — Filter state baru dengan warna kuning untuk container yang di-pause.
+- **Menu Pause/Unpause** — Item menu kondisional: Pause muncul saat container `running`, Unpause muncul saat `paused`.
+- **Menu Remove** — Item menu merah dengan `AlertDialog` konfirmasi. Jika container running, tombol berubah menjadi "Force Remove" dengan warning kuning.
+- **Menu Redeploy** — Item menu biru dengan badge "Swarm" atau "Restart" tergantung tipe container. Spinner animasi saat proses pull berlangsung. Disabled saat redeploy berjalan.
+
+#### `server/plugins/stats-poller.ts`
+
+- **Collect semua network interface** — Semua interface aktif (bukan loopback) dikumpulkan dengan `operstate` masing-masing.
+
+#### `app/components/dasboard/SystemResource.vue`
+
+- **Per-interface bandwidth breakdown** — Di bawah grafik network, ditampilkan daftar per interface dengan nama, badge operstate (up/down), rx/s, dan tx/s. Hanya muncul jika ada lebih dari 1 interface aktif.
+
+---
+
+### 🔧 CI/CD
+
+#### `.github/workflows/build-image.yml`
+
+- **`--frozen-lockfile`** — Ganti `--no-frozen-lockfile` agar build reproducible dan versi dependency tidak berubah antar run.
+
+#### `.gitlab-ci/build/Dockerfile`
+
+- **Hapus `npm install -g npm@11.9.0`** — Versi npm hardcoded dihapus, menggunakan npm yang sudah tersedia di base image `node:22-alpine`.
+
+---
+
 ## [1.4.1] — 2026-02-20
 
 ### 📱 Mobile UX
