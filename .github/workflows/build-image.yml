@@ -190,21 +190,22 @@ jobs:
       - name: Deploy Stack
         env:
           STACK_NAME: ${{ vars.STACK_NAME }}
+          DOMAIN: ${{ vars.DOMAIN }}
           COMPOSE_FILE: ${{ vars.DEPLOY_COMPOSE_PATH }}
         run: |
           NS_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
-          IMAGE="ghcr.io/$NS_LOWER/server-dashboard:$SHA_SHORT"
 
+          export IMAGE="ghcr.io/$NS_LOWER/server-dashboard:$SHA_SHORT"
+          export STACK_NAME="${STACK_NAME}"
+          export DOMAIN="${DOMAIN}"
           export IMAGE_NAMESPACE="$NS_LOWER"
-          export DOCKER_HUB="ghcr.io"
 
-          echo "Deploying image: $IMAGE"
+          echo "Deploying image: $IMAGE to domain: $DOMAIN"
 
           TEMP_COMPOSE=$(mktemp)
-          cp "$COMPOSE_FILE" "$TEMP_COMPOSE"
 
-          sed -i "s|image:.*server-dashboard:.*|image: ${IMAGE}|g" "$TEMP_COMPOSE"
+          sed "s|image:.*server-dashboard:.*|image: \${IMAGE}|g" "$COMPOSE_FILE" | envsubst > "$TEMP_COMPOSE"
 
           # Deploy
           docker stack deploy \
