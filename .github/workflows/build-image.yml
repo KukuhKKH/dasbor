@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build
+      - master
   workflow_dispatch:
     inputs:
       force_build_base:
@@ -25,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       base_changed: ${{ steps.filter.outputs.base == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_build_base == true) }}
-      app_changed: ${{ steps.filter.outputs.app == 'true' || github.event_name == 'workflow_dispatch' }}
+      app_changed: ${{ steps.filter.outputs.app == 'true' || steps.filter.outputs.deploy == 'true' || github.event_name == 'workflow_dispatch' }}
       deploy_changed: ${{ steps.filter.outputs.deploy == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
@@ -189,7 +190,9 @@ jobs:
 
   deploy:
     needs: build-release
-    if: always() && (needs.build-release.result == 'success')
+    if: |
+      always() && 
+      needs.build-release.result == 'success'
     runs-on: self-hosted
     environment:
       name: production
