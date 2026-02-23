@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { ThemeColor, ThemeType } from '@/constants/themes'
 import { THEME_COLORS, THEME_TYPE } from '@/constants/themes'
+import { useZenMode } from '~/composables/useZenMode'
 
 const { theme, updateAppSettings } = useAppSettings()
+const { isZenMode, toggleZenMode } = useZenMode()
 
 const allColors: ThemeColor[] = THEME_COLORS.map(color => color.name)
 const allTypes: ThemeType[] = THEME_TYPE
@@ -39,6 +41,27 @@ const colorMode = useColorMode()
 
 <template>
   <div class="grid gap-6">
+    <!-- Zen Mode Toggle -->
+    <div class="space-y-1.5 bg-primary/5 p-4 rounded-xl border border-primary/10">
+      <div class="flex items-center justify-between">
+         <div class="space-y-0.5">
+           <Label class="text-base font-bold text-primary">Zen Mode</Label>
+           <p class="text-[10px] text-muted-foreground leading-tight">Sembunyikan navigasi untuk fokus ke metrik</p>
+         </div>
+         <Button
+            variant="outline"
+            size="icon"
+            class="rounded-full shadow-sm transition-all"
+            :class="isZenMode ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-secondary'"
+            @click="toggleZenMode"
+         >
+            <Icon :name="isZenMode ? 'i-lucide-monitor-off' : 'i-lucide-monitor'" class="size-4" />
+         </Button>
+      </div>
+    </div>
+    
+    <Separator class="bg-border/50" />
+
     <div class="space-y-1.5">
       <Label>Color</Label>
       <div class="grid grid-cols-3 gap-2">
