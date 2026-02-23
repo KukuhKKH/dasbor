@@ -4,6 +4,7 @@ import { toast } from 'vue-sonner'
 
 interface Container {
   id: string;
+  full_id: string;
   name: string;
   image: string;
   state: string;
@@ -11,21 +12,7 @@ interface Container {
   created: number;
   ports: any[];
   labels: Record<string, string>;
-  stats: {
-    cpu_percent: number;
-    mem_usage: number;
-    mem_limit: number;
-    mem_percent: number;
-    net_rx: number;
-    net_tx: number;
-    blk_read: number;
-    blk_write: number;
-    limits?: {
-      memory: number;
-      memory_reservation: number;
-      cpu: number;
-    };
-  };
+  stats: any; // Fallback
 }
 
 type PendingAction =
@@ -34,15 +21,47 @@ type PendingAction =
 
 type StateFilter = 'all' | 'running' | 'exited' | 'restarting' | 'paused'
 
-const { data: containers, refresh } = await useFetch<Container[]>(
-  "/api/docker/containers",
-  { key: "docker-list", default: () => [] },
+// 1. Fetch Lightweight List API
+const { data: containers, refresh, status } = await useFetch<Container[]>(
+  "/api/docker/containers?stats=0",
+  { key: "docker-list", lazy: true, server: false, default: () => [] }
 );
 
 useIntervalFn(() => refresh(), 60000);
 
-// Search & Filter
+// 2. Expand/Collapse State
+const expandedIds = ref<Set<string>>(new Set());
+
+function toggleExpand(fullId: string) {
+  const newSet = new Set(expandedIds.value);
+  if (newSet.has(fullId)) {
+    newSet.delete(fullId);
+  } else {
+    newSet.add(fullId);
+    if (!statsMap.value[fullId]) {
+      statsLoading.value.add(fullId);
+      setTimeout(fetchDockerStats, 50);
+    }
+  }
+  expandedIds.value = newSet;
+}
+
+// 3. Search & Filter (Debounced)
 const searchQuery = ref("")
+const debouncedQuery = ref("")
+let searchTimeout: any = null
+
+watch(searchQuery, (val) => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    debouncedQuery.value = val.trim().toLowerCase()
+  }, 200)
+})
+
+onUnmounted(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
+
 const stateFilter = ref<StateFilter>("all")
 
 const STATE_FILTERS: { label: string; value: StateFilter }[] = [
@@ -53,16 +72,22 @@ const STATE_FILTERS: { label: string; value: StateFilter }[] = [
   { label: "Paused",     value: "paused" },
 ]
 
+// Pre-compute normalized data
+const normalizedContainers = computed(() => {
+  const list = containers.value ?? []
+  return list.map(c => ({
+    ...c,
+    _searchStr: (c.name + ' ' + c.image).toLowerCase()
+  }))
+})
+
 const filteredContainers = computed(() => {
-  let list = containers.value ?? []
+  let list = normalizedContainers.value
   if (stateFilter.value !== "all") {
     list = list.filter((c) => c.state === stateFilter.value)
   }
-  const q = searchQuery.value.trim().toLowerCase()
-  if (q) {
-    list = list.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.image.toLowerCase().includes(q)
-    )
+  if (debouncedQuery.value) {
+    list = list.filter((c) => c._searchStr.includes(debouncedQuery.value))
   }
   return list
 })
@@ -82,6 +107,61 @@ const activeCount = computed(() =>
   containers.value?.filter((c) => c.state === "running").length || 0
 )
 
+const STATS_POLLING_LIMIT = 50;
+const statsIdsToFetch = computed(() => {
+  return filteredContainers.value
+    .filter(c => c.state === 'running' && expandedIds.value.has(c.full_id))
+    .slice(0, STATS_POLLING_LIMIT)
+    .map(c => c.full_id)
+})
+
+// 4. Client-side Stats Polling Map
+const statsMap = ref<Record<string, any>>({});
+const statsLoading = ref<Set<string>>(new Set());
+
+const fetchDockerStats = async () => {
+  const ids = statsIdsToFetch.value;
+  if (ids.length === 0) return;
+
+  try {
+    const idsParam = ids.join(',');
+    const newStats = await $fetch<Record<string, any>>(`/api/docker/containers/stats?ids=${idsParam}`);
+    
+    statsMap.value = {
+      ...statsMap.value,
+      ...newStats
+    };
+
+    ids.forEach(id => {
+      if (statsLoading.value.has(id)) {
+        statsLoading.value.delete(id);
+      }
+    });
+  } catch (e: any) {
+    console.warn("Failed to fetch Docker stats:", e?.message);
+  }
+};
+
+useIntervalFn(fetchDockerStats, 5000); // 5 sec rhythm matching System Resources
+
+function getStats(c: Container) {
+  const mapStats = statsMap.value[c.full_id];
+  if (mapStats && Object.keys(mapStats).length > 0) return mapStats;
+  if (c.stats && Object.keys(c.stats).length > 0) return c.stats;
+
+  return {
+    cpu_percent: 0,
+    mem_usage: 0,
+    mem_limit: 0,
+    mem_percent: 0,
+    net_rx: 0,
+    net_tx: 0,
+    blk_read: 0,
+    blk_write: 0,
+    limits: { memory: 0, memory_reservation: 0, cpu: 0 }
+  };
+}
+
 const STATE_STYLES: Record<string, { dot: string; ring: string }> = {
   running:    { dot: "bg-emerald-500", ring: "ring-emerald-500/30" },
   exited:     { dot: "bg-slate-500",   ring: "ring-slate-500/30" },
@@ -98,7 +178,7 @@ function getStack(c: Container) {
 }
 
 function formatBytes(bytes: number) {
-  if (bytes === 0) return "0 B";
+  if (!bytes || bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -177,7 +257,7 @@ async function confirmRemove(force = false) {
   containerToRemove.value = null
 }
 
-// Redeploy (pull + swarm update / restart)
+// Redeploy
 const redeployingIds = ref<Set<string>>(new Set())
 
 function handleRedeploy(c: Container) {
@@ -211,7 +291,7 @@ async function executeRedeploy(c: Container) {
       : `✅ Redeployed — ${c.name} restarted with latest image`
 
     toast.success(doneMsg, { id: `redeploy-${c.id}`, duration: 8_000 })
-    setTimeout(refresh, 3000) // delay sedikit agar container sempat start
+    setTimeout(refresh, 3000)
   } catch (e: any) {
     toast.error(e.data?.statusMessage || `Redeploy failed for ${c.name}`, {
       id: `redeploy-${c.id}`,
@@ -226,13 +306,13 @@ async function executeRedeploy(c: Container) {
 
 <template>
   <Card
-    class="w-full h-full flex flex-col bg-linear-to-t from-card to-card/50 shadow-lg border-primary/10 overflow-hidden"
+    class="w-full h-full flex flex-col min-h-0 bg-linear-to-t from-card to-card/50 shadow-lg border-primary/10 overflow-hidden"
   >
-    <CardHeader class="flex flex-row items-center justify-between pb-3">
+    <CardHeader class="flex flex-row items-center justify-between pb-3 shrink-0">
       <div class="space-y-1">
         <CardTitle class="text-xl font-bold tracking-tight">Docker Health</CardTitle>
         <CardDescription class="text-sm text-muted-foreground">
-          Container status &amp; live metrics
+          Container status monitor
         </CardDescription>
       </div>
       <div class="flex items-center gap-2">
@@ -240,16 +320,13 @@ async function executeRedeploy(c: Container) {
           <span class="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
           <span class="text-xs font-semibold text-foreground">{{ activeCount }} Active</span>
         </div>
-        <!-- FIX: h-10 w-10 = 40px, lebih mudah dipencet di mobile -->
         <Button variant="outline" size="icon" class="h-10 w-10 rounded-full" @click="refresh()">
           <Icon name="i-lucide-refresh-cw" class="size-4" />
         </Button>
       </div>
     </CardHeader>
 
-    <!-- Search & Filter Bar -->
-    <div class="px-6 pb-3 space-y-2">
-      <!-- Search Input -->
+    <div class="px-6 pb-3 space-y-2 shrink-0">
       <div class="flex items-center gap-2 rounded-lg bg-secondary/30 border border-primary/5 px-3 py-2 focus-within:border-primary/20 focus-within:bg-secondary/50 transition-all">
         <Icon name="i-lucide-search" class="size-3.5 text-muted-foreground/50 shrink-0" />
         <input
@@ -267,7 +344,6 @@ async function executeRedeploy(c: Container) {
         </button>
       </div>
 
-      <!-- State Filter Chips — FIX: overflow-x-auto untuk mobile -->
       <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
         <button
           v-for="f in STATE_FILTERS"
@@ -299,12 +375,24 @@ async function executeRedeploy(c: Container) {
       </div>
     </div>
 
+    <!-- MAIN LIST CONTENT -->
+    <!-- min-h-0 and flex-1 allows inner scrolling independently -->
     <CardContent
-      class="flex-1 overflow-y-auto min-h-[300px] pr-2 space-y-3 scrollbar-thin scrollbar-track-secondary/20 scrollbar-thumb-primary/20"
+      class="flex-1 min-h-0 overflow-y-auto px-6 pb-6 space-y-3 scrollbar-thin scrollbar-track-secondary/20 scrollbar-thumb-primary/20"
     >
-      <!-- Empty: tidak ada container -->
+      <!-- Loading Skeleton Stack -->
+      <div v-if="status === 'pending' && (!containers || containers.length === 0)" class="space-y-3">
+        <div v-for="i in 8" :key="'skel-'+i" class="rounded-xl border border-primary/5 bg-secondary/10 p-3 h-[72px] flex items-center gap-3 animate-pulse">
+          <div class="h-9 w-9 rounded-lg bg-muted shrink-0"></div>
+          <div class="flex-1 space-y-2">
+            <div class="h-3 w-32 bg-muted rounded"></div>
+            <div class="h-2 w-48 bg-muted/60 rounded"></div>
+          </div>
+        </div>
+      </div>
+
       <div
-        v-if="!containers || containers.length === 0"
+        v-else-if="!containers || containers.length === 0"
         class="flex flex-col items-center justify-center py-20 text-center space-y-3"
       >
         <div class="p-4 rounded-full bg-secondary/50">
@@ -321,7 +409,6 @@ async function executeRedeploy(c: Container) {
         </Button>
       </div>
 
-      <!-- Empty: filter tidak cocok -->
       <div
         v-else-if="filteredContainers.length === 0"
         class="flex flex-col items-center justify-center py-16 text-center space-y-3"
@@ -346,11 +433,10 @@ async function executeRedeploy(c: Container) {
         </Button>
       </div>
 
-      <!-- Container List — FIX: TransitionGroup untuk animasi saat filter berubah -->
       <template v-else>
         <div
           v-if="searchQuery || stateFilter !== 'all'"
-          class="flex items-center justify-between text-[10px] text-muted-foreground/50 px-1"
+          class="flex items-center justify-between text-[10px] text-muted-foreground/50 px-1 mb-2 shrink-0"
         >
           <span>Menampilkan {{ filteredContainers.length }} dari {{ containers?.length }} container</span>
           <button
@@ -361,7 +447,8 @@ async function executeRedeploy(c: Container) {
           </button>
         </div>
 
-        <TransitionGroup
+        <component
+          :is="filteredContainers.length > 30 ? 'div' : 'TransitionGroup'"
           tag="div"
           class="space-y-3"
           enter-active-class="transition-all duration-200 ease-out"
@@ -373,13 +460,11 @@ async function executeRedeploy(c: Container) {
         >
           <div
             v-for="c in filteredContainers"
-            :key="c.id"
+            :key="c.full_id"
             class="group relative overflow-hidden rounded-xl border border-primary/5 bg-secondary/10 hover:bg-secondary/30 transition-all duration-300"
           >
             <div class="flex flex-col p-3 gap-3">
-              <!-- Top info -->
               <div class="flex items-center gap-3">
-                <!-- Status Indicator -->
                 <div
                   class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background/50 ring-1"
                   :class="getStateStyle(c.state).ring"
@@ -387,26 +472,38 @@ async function executeRedeploy(c: Container) {
                   <div class="h-2 w-2 rounded-full" :class="getStateStyle(c.state).dot" />
                 </div>
 
-                <!-- Info -->
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center justify-between mb-0.5">
                     <h3 class="font-bold text-sm text-foreground truncate pr-2 group-hover:text-primary transition-colors">
                       {{ c.name }}
                     </h3>
-                    <div class="flex items-center gap-2">
-                      <span class="text-[9px] uppercase font-bold tracking-wider text-muted-foreground/60 bg-background/40 px-1.5 py-0.5 rounded">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[9px] uppercase font-bold tracking-wider text-muted-foreground/60 bg-background/40 px-1.5 py-0.5 rounded mr-1">
                         {{ getStack(c) }}
                       </span>
-                      <!-- FIX: Actions button diperbesar ke h-9 w-9 (≈ 36px) -->
+                      
+                      <!-- Expand Toggle (Show only if running) -->
+                      <Button
+                        v-if="c.state === 'running'"
+                        variant="ghost" 
+                        size="icon" 
+                        class="h-8 w-8 rounded-full hover:bg-background/80"
+                        @click="toggleExpand(c.full_id)"
+                      >
+                        <Icon 
+                          :name="expandedIds.has(c.full_id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" 
+                          class="size-4 text-muted-foreground transition-transform duration-200" 
+                        />
+                      </Button>
+
                       <DropdownMenu>
                         <DropdownMenuTrigger as-child>
-                          <Button variant="ghost" size="icon" class="h-9 w-9 rounded-full hover:bg-background/80">
+                          <Button variant="ghost" size="icon" class="h-8 w-8 rounded-full hover:bg-background/80">
                             <Icon name="i-lucide-more-vertical" class="size-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <!-- FIX: py-2.5 pada setiap item agar touch target cukup besar -->
                           <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleViewLogs(c)">
                             <Icon name="i-lucide-file-text" class="mr-2 size-4" />
                             View Logs
@@ -478,69 +575,93 @@ async function executeRedeploy(c: Container) {
                 </div>
               </div>
 
-              <!-- Stats Bar -->
-              <div v-if="c.state === 'running'" class="grid grid-cols-2 gap-4 pt-1 border-t border-primary/5">
-                <!-- CPU -->
-                <div class="space-y-1.5">
-                  <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
-                    <div class="flex items-center gap-1">
-                      <span>CPU</span>
-                      <span v-if="c.stats.limits?.cpu" class="text-[8px] font-normal opacity-70 normal-case bg-primary/5 px-1 rounded">
-                        Max {{ c.stats.limits.cpu }}
+              <!-- COLLAPSIBLE STATS SECTION -->
+              <div 
+                v-if="c.state === 'running' && expandedIds.has(c.full_id)" 
+                class="grid grid-cols-2 gap-4 pt-1 border-t border-primary/5 animate-in fade-in slide-in-from-top-1 duration-200"
+              >
+                <!-- Loading State skeleton -->
+                <div v-if="statsLoading.has(c.full_id)" class="col-span-2 grid grid-cols-2 gap-4 mt-2 mb-1">
+                  <div class="space-y-2 animate-pulse">
+                    <div class="flex justify-between">
+                      <div class="h-2 w-8 bg-muted rounded"></div>
+                      <div class="h-2 w-8 bg-muted rounded"></div>
+                    </div>
+                    <div class="h-1.5 w-full bg-muted/50 rounded-full"></div>
+                  </div>
+                  <div class="space-y-2 animate-pulse">
+                    <div class="flex justify-between">
+                      <div class="h-2 w-8 bg-muted rounded"></div>
+                      <div class="h-2 w-12 bg-muted rounded"></div>
+                    </div>
+                    <div class="h-1.5 w-full bg-muted/50 rounded-full"></div>
+                  </div>
+                </div>
+
+                <template v-else>
+                  <!-- CPU -->
+                  <div class="space-y-1.5">
+                    <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
+                      <div class="flex items-center gap-1">
+                        <span>CPU</span>
+                        <span v-if="getStats(c).limits?.cpu" class="text-[8px] font-normal opacity-70 normal-case bg-primary/5 px-1 rounded">
+                          Max {{ getStats(c).limits?.cpu }}
+                        </span>
+                        <Icon v-else name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No CPU Limit Set" />
+                      </div>
+                      <span class="text-primary">{{ getStats(c).cpu_percent }}%</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-primary transition-all duration-500 rounded-full"
+                        :style="{ width: `${Math.min(getStats(c).cpu_percent, 100)}%` }"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Memory -->
+                  <div class="space-y-1.5">
+                    <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
+                      <div class="flex items-center gap-1">
+                        <span>RAM</span>
+                        <Icon v-if="!getStats(c).limits?.memory" name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No Memory Limit Set" />
+                      </div>
+                      <span class="text-purple-400">{{ formatBytes(getStats(c).mem_usage) }}</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-purple-500/10 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-purple-500 transition-all duration-500 rounded-full"
+                        :style="{ width: `${getStats(c).mem_percent}%` }"
+                      />
+                    </div>
+                    <div class="flex items-center justify-between text-[8px] text-muted-foreground/60 font-medium whitespace-nowrap overflow-hidden">
+                      <span class="truncate mr-2">Min: {{ getStats(c).limits?.memory_reservation ? formatBytes(getStats(c).limits.memory_reservation) : '-' }}</span>
+                      <span class="truncate text-right" :class="{'text-amber-500/80': !getStats(c).limits?.memory}">
+                        Max: {{ getStats(c).limits?.memory ? formatBytes(getStats(c).limits.memory) : 'Host (Unsafe)' }}
                       </span>
-                      <Icon v-else name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No CPU Limit Set" />
                     </div>
-                    <span class="text-primary">{{ c.stats.cpu_percent }}%</span>
                   </div>
-                  <div class="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
-                    <div
-                      class="h-full bg-primary transition-all duration-500 rounded-full"
-                      :style="{ width: `${Math.min(c.stats.cpu_percent, 100)}%` }"
-                    />
-                  </div>
-                </div>
-
-                <!-- Memory -->
-                <div class="space-y-1.5">
-                  <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
+                  
+                  <!-- Network -->
+                  <div class="col-span-2 flex items-center justify-between text-[9px] text-muted-foreground/50 font-mono mt-1 pt-1 border-t border-primary/5">
                     <div class="flex items-center gap-1">
-                      <span>RAM</span>
-                      <Icon v-if="!c.stats.limits?.memory" name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No Memory Limit Set" />
+                      <Icon name="i-lucide-arrow-down" class="size-2.5" />
+                      {{ formatBytes(getStats(c).net_rx) }}
                     </div>
-                    <span class="text-purple-400">{{ formatBytes(c.stats.mem_usage) }}</span>
+                    <div class="flex items-center gap-1">
+                      <Icon name="i-lucide-arrow-up" class="size-2.5" />
+                      {{ formatBytes(getStats(c).net_tx) }}
+                    </div>
                   </div>
-                  <div class="h-1.5 w-full bg-purple-500/10 rounded-full overflow-hidden">
-                    <div
-                      class="h-full bg-purple-500 transition-all duration-500 rounded-full"
-                      :style="{ width: `${c.stats.mem_percent}%` }"
-                    />
-                  </div>
-                  <div class="flex items-center justify-between text-[8px] text-muted-foreground/60 font-medium">
-                    <span>Min: {{ c.stats.limits?.memory_reservation ? formatBytes(c.stats.limits.memory_reservation) : '-' }}</span>
-                    <span :class="{'text-amber-500/80': !c.stats.limits?.memory}">
-                      Max: {{ c.stats.limits?.memory ? formatBytes(c.stats.limits.memory) : 'Host (Unsafe)' }}
-                    </span>
-                  </div>
-                </div>
+                </template>
+
               </div>
 
-              <!-- Network -->
-              <div v-if="c.state === 'running'" class="flex items-center justify-between text-[9px] text-muted-foreground/50 font-mono pt-1">
-                <div class="flex items-center gap-1">
-                  <Icon name="i-lucide-arrow-down" class="size-2.5" />
-                  {{ formatBytes(c.stats.net_rx) }}
-                </div>
-                <div class="flex items-center gap-1">
-                  <Icon name="i-lucide-arrow-up" class="size-2.5" />
-                  {{ formatBytes(c.stats.net_tx) }}
-                </div>
-              </div>
             </div>
 
-            <!-- Hover sidebar accent -->
             <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-primary/0 group-hover:bg-primary/50 transition-all duration-300" />
           </div>
-        </TransitionGroup>
+        </component>
       </template>
     </CardContent>
 
@@ -551,7 +672,6 @@ async function executeRedeploy(c: Container) {
       :container-name="selectedContainer?.name"
     />
 
-    <!-- Remove Confirmation Dialog -->
     <AlertDialog v-model:open="removeDialogOpen">
       <AlertDialogContent>
         <AlertDialogHeader>

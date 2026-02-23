@@ -1,6 +1,6 @@
 import si from 'systeminformation';
 
-export default defineEventHandler(async (event) => {
+export default defineCachedEventHandler(async (event) => {
   try {
     // 1. Uptime (Server Host)
     const time = si.time();
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
     const latency = await si.inetLatency(defaultGateway);
 
     // 4. Concentrator (Public IP & ISP Info)
-    const publicNetwork = await $fetch('http://ip-api.com/json/');
+    const publicNetwork: any = await $fetch('http://ip-api.com/json/');
 
     // Mask IP Helper
     const maskIp = (ip: string) => {
@@ -37,10 +37,14 @@ export default defineEventHandler(async (event) => {
         asn: publicNetwork.as         // Autonomous System Number
       }
     };
-  } catch (error) {
+  } catch (error: any) {
     return createError({
       statusCode: 500,
       statusMessage: 'Failed to retrieve network stats: ' + error.message,
     });
   }
+}, {
+  maxAge: 60, // Cache for 1 min in memory
+  name: 'network-stats',
+  swr: true // Serve stale while revalidating
 });
