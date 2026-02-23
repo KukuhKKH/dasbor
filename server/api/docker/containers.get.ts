@@ -134,7 +134,7 @@ function setCachedLimits(id: string, data: Limits) {
   inspectCache.set(id, { data, expiresAt: Date.now() + INSPECT_TTL_MS });
 }
 
-async function processContainer(c: Docker.ContainerInfo, hostUptimeSec: number) {
+async function processContainer(c: Docker.ContainerInfo, hostUptimeSec: number, withStats: boolean) {
   const rawImage = c.Image || "unknown";
   const cleanImage = rawImage.replace("sha256:", "");
 
@@ -160,7 +160,7 @@ async function processContainer(c: Docker.ContainerInfo, hostUptimeSec: number) 
     },
   };
 
-  if (c.State === "running") {
+  if (withStats && c.State === "running") {
     try {
       const containerRef = docker.getContainer(c.Id);
 
@@ -206,7 +206,10 @@ async function processContainer(c: Docker.ContainerInfo, hostUptimeSec: number) 
         const cpuPercent = calcCpuPercent(s);
         const memUsage = s?.memory_stats?.usage ?? 0;
         const memLimitEffective = s?.memory_stats?.limit ?? 0;
-        const memPercent = memLimitEffective > 0 ? (memUsage / memLimitEffective) * 100 : 0;
+
+        // Ensure proper denominator
+        const maxMem = cachedLimits?.memory && cachedLimits.memory > 0 ? cachedLimits.memory : memLimitEffective;
+        const memPercent = maxMem > 0 ? (memUsage / maxMem) * 100 : 0;
 
         const rx = sumNetworkBytes(s?.networks, "rx_bytes");
         const tx = sumNetworkBytes(s?.networks, "tx_bytes");
@@ -229,6 +232,7 @@ async function processContainer(c: Docker.ContainerInfo, hostUptimeSec: number) 
 
   return {
     id: c.Id.substring(0, 12),
+    full_id: c.Id,
     name: cleanName,
     image: cleanImage,
     state: c.State,
@@ -243,11 +247,15 @@ async function processContainer(c: Docker.ContainerInfo, hostUptimeSec: number) 
   };
 }
 
-let endpointCache: CacheEntry<any> | null = null;
-let pendingRequest: Promise<any> | null = null;
+let endpointCacheBasic: CacheEntry<any> | null = null;
+let endpointCacheStats: CacheEntry<any> | null = null;
+
+let pendingRequestBasic: Promise<any> | null = null;
+let pendingRequestStats: Promise<any> | null = null;
+
 const ENDPOINT_TTL_MS = 2000;
 
-async function fetchAllContainers() {
+async function fetchAllContainers(withStats: boolean) {
   const containers = await docker
     .listContainers({ all: true })
     .catch((err) => {
@@ -263,37 +271,62 @@ async function fetchAllContainers() {
 
   const formattedContainers = await Promise.all(
     containers.map((c) =>
-      limit(() => processContainer(c, hostUptimeSec))
+      limit(() => processContainer(c, hostUptimeSec, withStats))
     ),
   );
 
   return formattedContainers;
 }
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
   try {
+    const query = getQuery(event);
+    const withStats = query.stats === "1";
     const now = Date.now();
 
-    if (endpointCache && now < endpointCache.expiresAt) {
-      return endpointCache.data;
-    }
-    if (pendingRequest) {
-      return await pendingRequest;
-    }
+    if (withStats) {
+      if (endpointCacheStats && now < endpointCacheStats.expiresAt) {
+        return endpointCacheStats.data;
+      }
+      if (pendingRequestStats) {
+        return await pendingRequestStats;
+      }
 
-    pendingRequest = fetchAllContainers()
-      .then((res) => {
-        endpointCache = {
-          data: res,
-          expiresAt: Date.now() + ENDPOINT_TTL_MS,
-        };
-        return res;
-      })
-      .finally(() => {
-        pendingRequest = null;
-      });
+      pendingRequestStats = fetchAllContainers(true)
+        .then((res) => {
+          endpointCacheStats = {
+            data: res,
+            expiresAt: Date.now() + ENDPOINT_TTL_MS,
+          };
+          return res;
+        })
+        .finally(() => {
+          pendingRequestStats = null;
+        });
 
-    return await pendingRequest;
+      return await pendingRequestStats;
+    } else {
+      if (endpointCacheBasic && now < endpointCacheBasic.expiresAt) {
+        return endpointCacheBasic.data;
+      }
+      if (pendingRequestBasic) {
+        return await pendingRequestBasic;
+      }
+
+      pendingRequestBasic = fetchAllContainers(false)
+        .then((res) => {
+          endpointCacheBasic = {
+            data: res,
+            expiresAt: Date.now() + ENDPOINT_TTL_MS,
+          };
+          return res;
+        })
+        .finally(() => {
+          pendingRequestBasic = null;
+        });
+
+      return await pendingRequestBasic;
+    }
   } catch (error: any) {
     console.warn("Global Handler Error:", error?.message);
     return [];

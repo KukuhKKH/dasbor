@@ -14,7 +14,7 @@ const { isMobile } = useSidebar();
     <DasboardMiniPlayer />
 
     <DasboardServerMonitor />
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-[500px] lg:max-h-[calc(100vh-6rem)]">
       <DasboardDockerHealth />
       <DasboardSystemResource />
     </div>
