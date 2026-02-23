@@ -150,7 +150,7 @@ async function fetchContainerStats(id: string) {
             inspectPromise = containerRef.inspect().catch(() => null);
         }
 
-        const statsPromise = withTimeout(containerRef.stats({ stream: false }), 1500, null);
+        const statsPromise = withTimeout(containerRef.stats({ stream: false }), 4500, null);
 
         const [s, inspectData] = await Promise.all([
             statsPromise,

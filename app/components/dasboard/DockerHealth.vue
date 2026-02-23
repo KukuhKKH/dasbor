@@ -38,6 +38,10 @@ function toggleExpand(fullId: string) {
     newSet.delete(fullId);
   } else {
     newSet.add(fullId);
+    if (!statsMap.value[fullId]) {
+      statsLoading.value.add(fullId);
+      setTimeout(fetchDockerStats, 50);
+    }
   }
   expandedIds.value = newSet;
 }
@@ -113,8 +117,9 @@ const statsIdsToFetch = computed(() => {
 
 // 4. Client-side Stats Polling Map
 const statsMap = ref<Record<string, any>>({});
+const statsLoading = ref<Set<string>>(new Set());
 
-useIntervalFn(async () => {
+const fetchDockerStats = async () => {
   const ids = statsIdsToFetch.value;
   if (ids.length === 0) return;
 
@@ -126,10 +131,18 @@ useIntervalFn(async () => {
       ...statsMap.value,
       ...newStats
     };
+
+    ids.forEach(id => {
+      if (statsLoading.value.has(id)) {
+        statsLoading.value.delete(id);
+      }
+    });
   } catch (e: any) {
     console.warn("Failed to fetch Docker stats:", e?.message);
   }
-}, 5000); // 5 sec rhythm matching System Resources
+};
+
+useIntervalFn(fetchDockerStats, 5000); // 5 sec rhythm matching System Resources
 
 function getStats(c: Container) {
   const mapStats = statsMap.value[c.full_id];
@@ -567,60 +580,80 @@ async function executeRedeploy(c: Container) {
                 v-if="c.state === 'running' && expandedIds.has(c.full_id)" 
                 class="grid grid-cols-2 gap-4 pt-1 border-t border-primary/5 animate-in fade-in slide-in-from-top-1 duration-200"
               >
-                <!-- CPU -->
-                <div class="space-y-1.5">
-                  <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
-                    <div class="flex items-center gap-1">
-                      <span>CPU</span>
-                      <span v-if="getStats(c).limits?.cpu" class="text-[8px] font-normal opacity-70 normal-case bg-primary/5 px-1 rounded">
-                        Max {{ getStats(c).limits?.cpu }}
-                      </span>
-                      <Icon v-else name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No CPU Limit Set" />
+                <!-- Loading State skeleton -->
+                <div v-if="statsLoading.has(c.full_id)" class="col-span-2 grid grid-cols-2 gap-4 mt-2 mb-1">
+                  <div class="space-y-2 animate-pulse">
+                    <div class="flex justify-between">
+                      <div class="h-2 w-8 bg-muted rounded"></div>
+                      <div class="h-2 w-8 bg-muted rounded"></div>
                     </div>
-                    <span class="text-primary">{{ getStats(c).cpu_percent }}%</span>
+                    <div class="h-1.5 w-full bg-muted/50 rounded-full"></div>
                   </div>
-                  <div class="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
-                    <div
-                      class="h-full bg-primary transition-all duration-500 rounded-full"
-                      :style="{ width: `${Math.min(getStats(c).cpu_percent, 100)}%` }"
-                    />
+                  <div class="space-y-2 animate-pulse">
+                    <div class="flex justify-between">
+                      <div class="h-2 w-8 bg-muted rounded"></div>
+                      <div class="h-2 w-12 bg-muted rounded"></div>
+                    </div>
+                    <div class="h-1.5 w-full bg-muted/50 rounded-full"></div>
                   </div>
                 </div>
 
-                <!-- Memory -->
-                <div class="space-y-1.5">
-                  <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
-                    <div class="flex items-center gap-1">
-                      <span>RAM</span>
-                      <Icon v-if="!getStats(c).limits?.memory" name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No Memory Limit Set" />
+                <template v-else>
+                  <!-- CPU -->
+                  <div class="space-y-1.5">
+                    <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
+                      <div class="flex items-center gap-1">
+                        <span>CPU</span>
+                        <span v-if="getStats(c).limits?.cpu" class="text-[8px] font-normal opacity-70 normal-case bg-primary/5 px-1 rounded">
+                          Max {{ getStats(c).limits?.cpu }}
+                        </span>
+                        <Icon v-else name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No CPU Limit Set" />
+                      </div>
+                      <span class="text-primary">{{ getStats(c).cpu_percent }}%</span>
                     </div>
-                    <span class="text-purple-400">{{ formatBytes(getStats(c).mem_usage) }}</span>
+                    <div class="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-primary transition-all duration-500 rounded-full"
+                        :style="{ width: `${Math.min(getStats(c).cpu_percent, 100)}%` }"
+                      />
+                    </div>
                   </div>
-                  <div class="h-1.5 w-full bg-purple-500/10 rounded-full overflow-hidden">
-                    <div
-                      class="h-full bg-purple-500 transition-all duration-500 rounded-full"
-                      :style="{ width: `${getStats(c).mem_percent}%` }"
-                    />
+
+                  <!-- Memory -->
+                  <div class="space-y-1.5">
+                    <div class="flex justify-between text-[10px] uppercase tracking-tighter font-bold text-muted-foreground/80">
+                      <div class="flex items-center gap-1">
+                        <span>RAM</span>
+                        <Icon v-if="!getStats(c).limits?.memory" name="i-lucide-alert-triangle" class="size-3 text-amber-500/70" title="No Memory Limit Set" />
+                      </div>
+                      <span class="text-purple-400">{{ formatBytes(getStats(c).mem_usage) }}</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-purple-500/10 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-purple-500 transition-all duration-500 rounded-full"
+                        :style="{ width: `${getStats(c).mem_percent}%` }"
+                      />
+                    </div>
+                    <div class="flex items-center justify-between text-[8px] text-muted-foreground/60 font-medium whitespace-nowrap overflow-hidden">
+                      <span class="truncate mr-2">Min: {{ getStats(c).limits?.memory_reservation ? formatBytes(getStats(c).limits.memory_reservation) : '-' }}</span>
+                      <span class="truncate text-right" :class="{'text-amber-500/80': !getStats(c).limits?.memory}">
+                        Max: {{ getStats(c).limits?.memory ? formatBytes(getStats(c).limits.memory) : 'Host (Unsafe)' }}
+                      </span>
+                    </div>
                   </div>
-                  <div class="flex items-center justify-between text-[8px] text-muted-foreground/60 font-medium whitespace-nowrap overflow-hidden">
-                    <span class="truncate mr-2">Min: {{ getStats(c).limits?.memory_reservation ? formatBytes(getStats(c).limits.memory_reservation) : '-' }}</span>
-                    <span class="truncate text-right" :class="{'text-amber-500/80': !getStats(c).limits?.memory}">
-                      Max: {{ getStats(c).limits?.memory ? formatBytes(getStats(c).limits.memory) : 'Host (Unsafe)' }}
-                    </span>
+                  
+                  <!-- Network -->
+                  <div class="col-span-2 flex items-center justify-between text-[9px] text-muted-foreground/50 font-mono mt-1 pt-1 border-t border-primary/5">
+                    <div class="flex items-center gap-1">
+                      <Icon name="i-lucide-arrow-down" class="size-2.5" />
+                      {{ formatBytes(getStats(c).net_rx) }}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <Icon name="i-lucide-arrow-up" class="size-2.5" />
+                      {{ formatBytes(getStats(c).net_tx) }}
+                    </div>
                   </div>
-                </div>
-                
-                <!-- Network -->
-                <div class="col-span-2 flex items-center justify-between text-[9px] text-muted-foreground/50 font-mono mt-1 pt-1 border-t border-primary/5">
-                  <div class="flex items-center gap-1">
-                    <Icon name="i-lucide-arrow-down" class="size-2.5" />
-                    {{ formatBytes(getStats(c).net_rx) }}
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <Icon name="i-lucide-arrow-up" class="size-2.5" />
-                    {{ formatBytes(getStats(c).net_tx) }}
-                  </div>
-                </div>
+                </template>
 
               </div>
 
