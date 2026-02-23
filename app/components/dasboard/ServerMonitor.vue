@@ -2,14 +2,16 @@
 import type { NetworkStats } from '~/types/dashboard'
 import { useIntervalFn } from '@vueuse/core'
 
-const { data, refresh } = await useFetch<NetworkStats>('/api/network', {
+const { data, refresh, status } = await useFetch<NetworkStats>('/api/network', {
   key: 'network-stats',
+  lazy: true,
+  server: false
 })
 
 const uptimeSeconds = ref(0)
 
-watch(data, (newVal: NetworkStats | null) => {
-  if (newVal?.uptime?.seconds) {
+watch(data, (newVal) => {
+  if (newVal && newVal.uptime?.seconds) {
     uptimeSeconds.value = newVal.uptime.seconds
   }
 }, { immediate: true })
@@ -63,8 +65,16 @@ function formatUptime(seconds: number) {
     </CardHeader>
 
     <CardContent class="grid gap-8">
+      <div v-if="status === 'pending'" class="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4 animate-pulse mb-8">
+        <div v-for="i in 4" :key="'ts-'+i" class="flex flex-col gap-1.5">
+          <div class="h-3 w-24 bg-muted rounded"></div>
+          <div class="h-8 w-32 bg-muted/60 rounded mt-1"></div>
+          <div class="h-3 w-20 bg-muted/40 rounded mt-1"></div>
+        </div>
+      </div>
+
       <!-- Top Row: Primary Stats -->
-      <div class="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+      <div v-else class="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
         <div class="flex flex-col gap-1.5">
           <span
             class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80"
@@ -132,8 +142,18 @@ function formatUptime(seconds: number) {
 
       <Separator class="bg-primary/5" />
 
+      <div v-if="status === 'pending'" class="grid grid-cols-1 gap-8 md:grid-cols-3 animate-pulse mt-8">
+        <div v-for="i in 3" :key="'bs-'+i" class="flex items-center gap-4">
+          <div class="p-3 rounded-xl bg-muted size-11 shrink-0"></div>
+          <div class="flex flex-col w-full gap-2">
+            <div class="h-3 w-20 bg-muted rounded"></div>
+            <div class="h-4 w-32 bg-muted/60 rounded"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Bottom Row: Detailed Context -->
-      <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
+      <div v-else class="grid grid-cols-1 gap-8 md:grid-cols-3">
         <div class="flex items-center gap-4 group">
           <div
             class="p-3 rounded-xl bg-primary/5 group-hover:bg-primary/10 transition-colors"

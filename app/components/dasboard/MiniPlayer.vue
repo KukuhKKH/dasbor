@@ -11,8 +11,11 @@ interface Song {
 }
 
 // Fetch playlist
-const { data: playlist } = await useFetch<Song[]>("/api/music/list", {
+const { data: playlist, status } = await useFetch<Song[]>("/api/music/list", {
   key: "music-list",
+  lazy: true,
+  server: false,
+  default: () => []
 });
 
 // State
@@ -186,8 +189,28 @@ function onCanPlay() {
     </CardHeader>
 
     <CardContent class="pb-4">
+      <div v-if="status === 'pending'" class="flex flex-col md:flex-row items-center gap-5 pb-3 animate-pulse">
+        <div class="flex items-center gap-3">
+          <div class="size-11 rounded-full bg-muted"></div>
+          <div class="size-14 rounded-full bg-muted/80 shadow-lg"></div>
+          <div class="size-11 rounded-full bg-muted"></div>
+        </div>
+        <div class="flex flex-col items-center md:items-start flex-1 w-full gap-1.5">
+          <div class="h-3 w-20 bg-muted/60 rounded"></div>
+          <div class="h-6 w-48 bg-muted rounded mt-1"></div>
+          <div class="h-4 w-32 bg-muted/40 rounded"></div>
+        </div>
+        <div class="flex flex-col w-full md:max-w-[300px] gap-2">
+          <div class="h-3 w-full rounded-full bg-muted/30 mt-2"></div>
+          <div class="flex justify-between w-full mt-1">
+            <div class="h-3 w-8 bg-muted/20 rounded"></div>
+            <div class="h-3 w-8 bg-muted/20 rounded"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Player Controls Row -->
-      <div class="flex flex-col md:flex-row items-center gap-5 pb-3">
+      <div v-else class="flex flex-col md:flex-row items-center gap-5 pb-3">
         <!-- Controls -->
         <div class="flex items-center gap-3">
           <!-- FIX: min-w/h 44px untuk touch target yang layak -->

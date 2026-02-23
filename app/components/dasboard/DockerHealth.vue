@@ -24,7 +24,7 @@ type StateFilter = 'all' | 'running' | 'exited' | 'restarting' | 'paused'
 // 1. Fetch Lightweight List API
 const { data: containers, refresh, status } = await useFetch<Container[]>(
   "/api/docker/containers?stats=0",
-  { key: "docker-list", default: () => [] }
+  { key: "docker-list", lazy: true, server: false, default: () => [] }
 );
 
 useIntervalFn(() => refresh(), 60000);
