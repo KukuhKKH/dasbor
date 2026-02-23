@@ -24,9 +24,9 @@ jobs:
   check-changes:
     runs-on: ubuntu-latest
     outputs:
-      base_changed: ${{ steps.filter.outputs.base }}
-      app_changed: ${{ steps.filter.outputs.app }}
-      deploy_changed: ${{ steps.filter.outputs.deploy }}
+      base_changed: ${{ steps.filter.outputs.base == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_build_base == true) }}
+      app_changed: ${{ steps.filter.outputs.app == 'true' || github.event_name == 'workflow_dispatch' }}
+      deploy_changed: ${{ steps.filter.outputs.deploy == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,9 +41,13 @@ jobs:
             app:
               - 'app/**'
               - 'server/**'
+              - 'public/**'
               - 'nuxt.config.ts'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - 'tsconfig.json'
+              - 'index.d.ts'
+              - '.gitlab-ci/build/**'
             deploy:
               - '.github/workflows/**'
               - '.gitlab-ci/deploy/**'
