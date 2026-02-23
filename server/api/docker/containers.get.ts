@@ -4,7 +4,7 @@ import pLimit from "p-limit";
 
 const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 
-const limit = pLimit(5);
+const limit = pLimit(50);
 
 function round(n: number, d = 2) {
   const p = 10 ** d;
