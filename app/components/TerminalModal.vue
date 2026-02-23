@@ -64,6 +64,11 @@ async function startSession() {
    isTyping.value = true
    
    for (const line of welcomeLines) {
+      if (!isOpen.value) {
+         isTyping.value = false;
+         return; 
+      }
+
       history.value.push({ type: 'output', content: line })
       await new Promise(r => setTimeout(r, 40)) // slight delay between lines
    }
@@ -87,7 +92,10 @@ function handleEnter() {
   history.value.push({ type: 'input', content: `root@vm-dashboard:~# ${cmd}` })
   
   if (cmd) {
-    const [commandName, ...args] = cmd.split(' ')
+    const parts = cmd.split(' ')
+    const commandName = parts[0] || ''
+    const args = parts.slice(1)
+    
     const command = commands[commandName.toLowerCase()]
     
     if (command) {

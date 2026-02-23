@@ -54,6 +54,10 @@ watch(searchQuery, (val) => {
   }, 200)
 })
 
+onUnmounted(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
+
 const stateFilter = ref<StateFilter>("all")
 
 const STATE_FILTERS: { label: string; value: StateFilter }[] = [
