@@ -52,6 +52,10 @@ onMounted(() => {
     loading.value = false
   }, 1500)
 })
+const toasterTheme = computed(() => {
+  const pref = colorMode.preference
+  return (pref === 'system' || pref === 'light' || pref === 'dark') ? pref : 'system'
+})
 </script>
 
 <template>
@@ -68,7 +72,7 @@ onMounted(() => {
         <AppSettings />
       </div>
 
-      <Toaster :theme="colorMode.preference as any || 'system'" position="top-right" />
+      <Toaster :theme="toasterTheme" position="top-right" />
     </ConfigProvider>
   </Body>
 </template>

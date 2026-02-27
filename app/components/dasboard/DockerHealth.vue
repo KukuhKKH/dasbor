@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useIntervalFn } from "@vueuse/core";
+import { useIntervalFn, useDocumentVisibility } from "@vueuse/core";
 import { toast } from 'vue-sonner'
 
 interface Container {
@@ -142,7 +142,13 @@ const fetchDockerStats = async () => {
   }
 };
 
-useIntervalFn(fetchDockerStats, 5000); // 5 sec rhythm matching System Resources
+const isVisible = useDocumentVisibility();
+
+useIntervalFn(() => {
+  if (isVisible.value === 'visible') {
+    fetchDockerStats();
+  }
+}, 5000);
 
 function getStats(c: Container) {
   const mapStats = statsMap.value[c.full_id];
