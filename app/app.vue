@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ConfigProvider } from 'reka-ui'
 import { Toaster } from '@/components/ui/sonner'
-import AppPreloader from '@/components/ui/AppPreloader.vue'
+import AppPreloader from '@/components/AppPreloader.vue'
 import 'vue-sonner/style.css'
 
 const colorMode = useColorMode()

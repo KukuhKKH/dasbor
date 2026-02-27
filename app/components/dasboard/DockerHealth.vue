@@ -302,6 +302,49 @@ async function executeRedeploy(c: Container) {
     redeployingIds.value = next
   }
 }
+
+const redirectDialogOpen = ref(false)
+const urlToRedirect = ref("")
+const containerNameForRedirect = ref("")
+const isSwarmForRedirect = ref(false)
+
+function getTraefikUrl(labels: Record<string, string>) {
+  const hostLabel = Object.keys(labels).find(k => k.startsWith('traefik.http.routers.') && k.endsWith('.rule'))
+  if (!hostLabel) return null
+
+  const rule = labels[hostLabel]
+  const match = rule.match(/Host\(`([^`]+)`\)/)
+  if (match && match[1]) {
+    const host = match[1].split(',')[0].trim().replace(/`/g, '')
+    
+    const isLocal = host.endsWith('.test') || 
+                    host.endsWith('.localhost') || 
+                    host.endsWith('.local') ||
+                    /^(\d{1,3}\.){3}\d{1,3}$/.test(host)
+    
+    const protocol = isLocal ? 'http' : 'https'
+    return `${protocol}://${host}`
+  }
+
+  return null
+}
+
+function handleVisitSite(c: Container) {
+  const url = getTraefikUrl(c.labels)
+  if (url) {
+    urlToRedirect.value = url
+    containerNameForRedirect.value = c.name
+    isSwarmForRedirect.value = !!c.labels?.['com.docker.swarm.service.id']
+    redirectDialogOpen.value = true
+  }
+}
+
+function confirmRedirect() {
+  if (urlToRedirect.value) {
+    window.open(urlToRedirect.value, '_blank')
+    redirectDialogOpen.value = false
+  }
+}
 </script>
 
 <template>
@@ -482,6 +525,18 @@ async function executeRedeploy(c: Container) {
                         {{ getStack(c) }}
                       </span>
                       
+                      <!-- Visit Site Quick Button -->
+                      <Button
+                        v-if="getTraefikUrl(c.labels)"
+                        variant="ghost" 
+                        size="icon" 
+                        class="h-8 w-8 rounded-full hover:bg-background/80 text-primary"
+                        title="Visit Site"
+                        @click="handleVisitSite(c)"
+                      >
+                        <Icon name="i-lucide-external-link" class="size-4" />
+                      </Button>
+
                       <!-- Expand Toggle (Show only if running) -->
                       <Button
                         v-if="c.state === 'running'"
@@ -504,6 +559,15 @@ async function executeRedeploy(c: Container) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            v-if="getTraefikUrl(c.labels)"
+                            class="py-2.5 cursor-pointer text-primary focus:text-primary font-medium"
+                            @click="handleVisitSite(c)"
+                          >
+                            <Icon name="i-lucide-external-link" class="mr-2 size-4" />
+                            Visit Site
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator v-if="getTraefikUrl(c.labels)" />
                           <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleViewLogs(c)">
                             <Icon name="i-lucide-file-text" class="mr-2 size-4" />
                             View Logs
@@ -712,5 +776,12 @@ async function executeRedeploy(c: Container) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <DasboardDockerTraefikRedirectModal
+      v-model:open="redirectDialogOpen"
+      :url="urlToRedirect"
+      :container-name="containerNameForRedirect"
+      :is-swarm="isSwarmForRedirect"
+    />
   </Card>
 </template>
