@@ -31,10 +31,11 @@ const duration = ref("0:00");
 const showPlaylist = ref(false);
 const playlistSearch = ref("");
 
-// Init
-if (playlist.value && playlist.value.length > 0) {
-  currentSong.value = playlist.value[0]!;
-}
+watch(playlist, (newList) => {
+  if (newList && newList.length > 0 && !currentSong.value) {
+    currentSong.value = newList[0]!;
+  }
+}, { immediate: true });
 
 // Filtered playlist
 const filteredPlaylist = computed(() => {
