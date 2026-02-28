@@ -25,15 +25,24 @@ useHead({
   },
 })
 
-const title = 'Dashboard Server'
-const description = 'Dashboard Server'
+const title = 'BangLipai Cloud | Smart Server Management'
+const description = 'Kelola server Anda dengan mudah dan efisien melalui dashboard modern BangLipai Cloud. Pantau performa, kelola Docker, dan optimalkan infrastruktur Anda dalam satu tempat.'
+const siteUrl = 'https://instagram.com/kukuhkkh'
+const ogImage = '/img/og-image.png'
 
 useSeoMeta({
   title,
   description,
   ogTitle: title,
   ogDescription: description,
-  ogUrl: 'https://instagram.com/kukuhkkh',
+  ogUrl: siteUrl,
+  ogImage: ogImage,
+  ogType: 'website',
+  ogSiteName: 'BangLipai Cloud',
+  twitterCard: 'summary_large_image',
+  twitterTitle: title,
+  twitterDescription: description,
+  twitterImage: ogImage,
 })
 
 const router = useRouter()

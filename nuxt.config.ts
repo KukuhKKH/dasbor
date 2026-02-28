@@ -9,6 +9,12 @@ const env = ((globalThis as MaybeProcessEnv).process?.env) ?? {}
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   devtools: { enabled: true },
+  app: {
+    head: {
+      titleTemplate: '%s | BangLipai Cloud',
+      title: 'BangLipai Cloud',
+    },
+  },
 
   devServer: {
     host: process.env.DEV_HOST || 'localhost',
