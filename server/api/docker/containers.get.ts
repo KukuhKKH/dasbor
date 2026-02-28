@@ -256,22 +256,42 @@ let pendingRequestStats: Promise<any> | null = null;
 const ENDPOINT_TTL_MS = 2000;
 
 async function fetchAllContainers(withStats: boolean) {
-  const containers = await docker
-    .listContainers({ all: true })
-    .catch((err) => {
+  const [containers, services] = await Promise.all([
+    docker.listContainers({ all: true }).catch((err) => {
       console.warn("Docker list failed:", err.message);
       return [] as Docker.ContainerInfo[];
-    });
+    }),
+    docker.listServices().catch(() => [] as any[]),
+  ]);
 
   if (containers.length === 0) {
     return [];
   }
 
+  const serviceLabelsMap = new Map<string, Record<string, string>>();
+  services.forEach((s: any) => {
+    if (s.ID && s.Spec?.Labels) {
+      serviceLabelsMap.set(s.ID, s.Spec.Labels);
+    }
+  });
+
   const hostUptimeSec = await readHostUptimeSeconds();
 
   const formattedContainers = await Promise.all(
     containers.map((c) =>
-      limit(() => processContainer(c, hostUptimeSec, withStats))
+      limit(async () => {
+        const processed = await processContainer(c, hostUptimeSec, withStats);
+        
+        const serviceId = c.Labels?.["com.docker.swarm.service.id"];
+        if (serviceId && serviceLabelsMap.has(serviceId)) {
+          processed.labels = {
+            ...serviceLabelsMap.get(serviceId),
+            ...processed.labels,
+          };
+        }
+        
+        return processed;
+      })
     ),
   );
 
