@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useIntervalFn, useDocumentVisibility } from "@vueuse/core";
 import { toast } from 'vue-sonner'
+import { useVirtualizer } from '@tanstack/vue-virtual'
 
 interface Container {
   id: string;
@@ -314,11 +315,13 @@ const urlToRedirect = ref("")
 const containerNameForRedirect = ref("")
 const isSwarmForRedirect = ref(false)
 
-function getTraefikUrl(labels: Record<string, string>) {
+function getTraefikUrl(labels?: Record<string, string>) {
+  if (!labels) return null
   const hostLabel = Object.keys(labels).find(k => k.startsWith('traefik.http.routers.') && k.endsWith('.rule'))
   if (!hostLabel) return null
 
-  const rule = labels[hostLabel]
+  const rule = ((labels as Record<string, string>)[hostLabel] as unknown as string)
+  if (!rule) return null
   const match = rule.match(/Host\(`([^`]+)`\)/)
   if (match && match[1]) {
     const host = match[1].split(',')[0].trim().replace(/`/g, '')
@@ -351,6 +354,32 @@ function confirmRedirect() {
     redirectDialogOpen.value = false
   }
 }
+
+// Virtual Scrolling Support
+const parentRef = ref<HTMLElement | null>(null)
+
+const rowVirtualizer = useVirtualizer(
+  computed(() => ({
+    count: filteredContainers.value.length,
+    getScrollElement: () => parentRef.value,
+    estimateSize: (index) => {
+      const c = filteredContainers.value[index]
+      if (c && c.state === 'running' && expandedIds.value.has(c.full_id)) {
+        return 200 
+      }
+      return 100 
+    },
+    overscan: 5,
+  }))
+)
+
+function measureVirtualElement(el: any) {
+  if (!el) return
+  rowVirtualizer.value.measureElement(el.$el || el)
+}
+
+const virtualItems = computed(() => rowVirtualizer.value.getVirtualItems())
+const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
 </script>
 
 <template>
@@ -425,9 +454,10 @@ function confirmRedirect() {
     </div>
 
     <!-- MAIN LIST CONTENT -->
-    <!-- min-h-0 and flex-1 allows inner scrolling independently -->
-    <CardContent
-      class="flex-1 min-h-0 overflow-y-auto px-6 pb-6 space-y-3 scrollbar-thin scrollbar-track-secondary/20 scrollbar-thumb-primary/20"
+    <div
+      ref="parentRef"
+      class="overflow-y-auto w-full px-6 pb-6 overflow-x-hidden [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-primary/40"
+      style="scroll-behavior: smooth; max-height: 580px;"
     >
       <!-- Loading Skeleton Stack -->
       <div v-if="status === 'pending' && (!containers || containers.length === 0)" class="space-y-3">
@@ -496,23 +526,23 @@ function confirmRedirect() {
           </button>
         </div>
 
-        <component
-          :is="filteredContainers.length > 30 ? 'div' : 'TransitionGroup'"
-          tag="div"
-          class="space-y-3"
-          enter-active-class="transition-all duration-200 ease-out"
-          enter-from-class="opacity-0 translate-y-1"
-          enter-to-class="opacity-100 translate-y-0"
-          leave-active-class="transition-all duration-150 ease-in absolute w-full"
-          leave-from-class="opacity-100"
-          leave-to-class="opacity-0"
-        >
+        <div class="relative w-full" :style="{ height: `${totalSize}px` }">
           <div
-            v-for="c in filteredContainers"
-            :key="c.full_id"
-            class="group relative overflow-hidden rounded-xl border border-primary/5 bg-secondary/10 hover:bg-secondary/30 transition-all duration-300"
+            v-for="virtualRow in virtualItems"
+            :key="virtualRow.index"
+            :data-index="virtualRow.index"
+            :ref="measureVirtualElement"
+            class="absolute top-0 left-0 w-full pb-3"
+            :style="{
+              transform: `translateY(${virtualRow.start}px)`,
+            }"
           >
-            <div class="flex flex-col p-3 gap-3">
+            <template v-for="c in [filteredContainers[virtualRow.index]]" :key="c ? c.full_id : 'loading'">
+              <div
+                v-if="c"
+                class="group relative overflow-hidden rounded-xl border border-primary/5 bg-secondary/10 hover:bg-secondary/30 transition-all duration-300"
+              >
+                <div class="flex flex-col p-3 gap-3">
               <div class="flex items-center gap-3">
                 <div
                   class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background/50 ring-1"
@@ -729,11 +759,13 @@ function confirmRedirect() {
 
             </div>
 
-            <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-primary/0 group-hover:bg-primary/50 transition-all duration-300" />
+              <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-primary/0 group-hover:bg-primary/50 transition-all duration-300" />
+              </div>
+            </template>
           </div>
-        </component>
+        </div>
       </template>
-    </CardContent>
+    </div>
 
     <DockerAuthModal v-model:open="authOpen" @authenticated="onAuthenticated" />
     <DockerLogsModal

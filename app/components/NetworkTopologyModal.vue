@@ -84,7 +84,7 @@ function getPath(conn: { from: string, to: string }) {
      leave-from-class="opacity-100 scale-100"
      leave-to-class="opacity-0 scale-95"
   >
-    <div v-if="isOpen" class="fixed inset-0 z-100 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
+    <div v-show="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
       <div class="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity" @click="isOpen = false" />
 
       <div class="relative w-full max-w-6xl h-[700px] flex flex-col rounded-2xl overflow-hidden shadow-2xl bg-[#09090b] border border-white/10 ring-1 ring-white/5">

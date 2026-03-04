@@ -80,10 +80,11 @@ async function startSession() {
 
 watch(isOpen, (val: boolean) => {
   if (val) {
-    startSession()
-  } else {
-    history.value = []
-    currentInput.value = ''
+    if (history.value.length === 0) {
+      startSession()
+    } else {
+      nextTick(() => focusInput())
+    }
   }
 })
 
@@ -141,7 +142,7 @@ function handleContainerClick() {
      leave-from-class="opacity-100 scale-100"
      leave-to-class="opacity-0 scale-95"
   >
-    <div v-if="isOpen" class="fixed inset-0 z-100 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
+    <div v-show="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
       <!-- Backdrop -->
       <div class="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="isOpen = false" />
 

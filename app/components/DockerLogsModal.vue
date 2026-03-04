@@ -58,9 +58,14 @@ const { pause, resume } = useIntervalFn(() => {
     }
 }, 3000, { immediate: false })
 
+const prevContainerId = ref<string | null>(null)
+
 watch(isOpen, (val) => {
     if (val) {
-        logs.value = 'Loading logs...'
+        if (prevContainerId.value !== props.containerId) {
+            logs.value = 'Loading logs...'
+            prevContainerId.value = props.containerId || null
+        }
         fetchLogs()
         resume()
     } else {
