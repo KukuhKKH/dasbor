@@ -1,7 +1,8 @@
 import Docker from 'dockerode'
+import { validateWorkloadId } from '../../../utils/dockerSecurity'
+import { rateLimitMiddleware } from '../../../utils/rateLimiter'
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' })
-const CONTAINER_ID_RE = /^[a-f0-9]{12,64}$/i
 
 /**
  * Tarik image terbaru dari registry menggunakan modem Dockerode.
@@ -22,8 +23,11 @@ function pullImage(image: string): Promise<void> {
 export default defineEventHandler(async (event) => {
   requireDockerAuth(event)
 
+  // Apply rate limiting per IP prior to execution
+  rateLimitMiddleware(event)
+
   const id = getRouterParam(event, 'id')
-  if (!id || !CONTAINER_ID_RE.test(id)) {
+  if (!id || !validateWorkloadId(id)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid container ID' })
   }
 

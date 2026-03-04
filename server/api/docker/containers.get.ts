@@ -1,6 +1,7 @@
 import Docker from "dockerode";
 import fs from "fs/promises";
 import pLimit from "p-limit";
+import { sanitizeWorkload } from "../../utils/dockerSecurity";
 
 const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 
@@ -281,7 +282,7 @@ async function fetchAllContainers(withStats: boolean) {
     containers.map((c) =>
       limit(async () => {
         const processed = await processContainer(c, hostUptimeSec, withStats);
-        
+
         const serviceId = c.Labels?.["com.docker.swarm.service.id"];
         if (serviceId && serviceLabelsMap.has(serviceId)) {
           processed.labels = {
@@ -289,8 +290,8 @@ async function fetchAllContainers(withStats: boolean) {
             ...processed.labels,
           };
         }
-        
-        return processed;
+
+        return sanitizeWorkload(processed);
       })
     ),
   );

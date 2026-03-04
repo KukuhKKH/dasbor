@@ -5,15 +5,16 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 
 interface Container {
   id: string;
-  full_id: string;
   name: string;
   image: string;
+  mode: 'standalone' | 'swarm';
   state: string;
   status: string;
   created: number;
-  ports: any[];
-  labels: Record<string, string>;
   stats: any; // Fallback
+  app_url: string | null;
+  stack: string | null;
+  service: string | null;
 }
 
 type PendingAction =
@@ -111,9 +112,9 @@ const activeCount = computed(() =>
 const STATS_POLLING_LIMIT = 50;
 const statsIdsToFetch = computed(() => {
   return filteredContainers.value
-    .filter(c => c.state === 'running' && expandedIds.value.has(c.full_id))
+    .filter(c => c.state === 'running' && expandedIds.value.has(c.id))
     .slice(0, STATS_POLLING_LIMIT)
-    .map(c => c.full_id)
+    .map(c => c.id)
 })
 
 // 4. Client-side Stats Polling Map
@@ -152,7 +153,7 @@ useIntervalFn(() => {
 }, 5000);
 
 function getStats(c: Container) {
-  const mapStats = statsMap.value[c.full_id];
+  const mapStats = statsMap.value[c.id];
   if (mapStats && Object.keys(mapStats).length > 0) return mapStats;
   if (c.stats && Object.keys(c.stats).length > 0) return c.stats;
 
@@ -181,7 +182,7 @@ function getStateStyle(state: string) {
 }
 
 function getStack(c: Container) {
-  return c.labels?.["com.docker.stack.namespace"] || "Standalone";
+  return c.stack || c.service || "Standalone";
 }
 
 function formatBytes(bytes: number) {
@@ -277,7 +278,7 @@ function handleRedeploy(c: Container) {
 }
 
 async function executeRedeploy(c: Container) {
-  const isSwarm = !!c.labels?.['com.docker.swarm.service.id']
+  const isSwarm = c.mode === 'swarm'
 
   redeployingIds.value = new Set([...redeployingIds.value, c.id])
 
@@ -315,35 +316,11 @@ const urlToRedirect = ref("")
 const containerNameForRedirect = ref("")
 const isSwarmForRedirect = ref(false)
 
-function getTraefikUrl(labels?: Record<string, string>) {
-  if (!labels) return null
-  const hostLabel = Object.keys(labels).find(k => k.startsWith('traefik.http.routers.') && k.endsWith('.rule'))
-  if (!hostLabel) return null
-
-  const rule = ((labels as Record<string, string>)[hostLabel] as unknown as string)
-  if (!rule) return null
-  const match = rule.match(/Host\(`([^`]+)`\)/)
-  if (match && match[1]) {
-    const host = match[1].split(',')[0].trim().replace(/`/g, '')
-    
-    const isLocal = host.endsWith('.test') || 
-                    host.endsWith('.localhost') || 
-                    host.endsWith('.local') ||
-                    /^(\d{1,3}\.){3}\d{1,3}$/.test(host)
-    
-    const protocol = isLocal ? 'http' : 'https'
-    return `${protocol}://${host}`
-  }
-
-  return null
-}
-
 function handleVisitSite(c: Container) {
-  const url = getTraefikUrl(c.labels)
-  if (url) {
-    urlToRedirect.value = url
+  if (c.app_url) {
+    urlToRedirect.value = c.app_url
     containerNameForRedirect.value = c.name
-    isSwarmForRedirect.value = !!c.labels?.['com.docker.swarm.service.id']
+    isSwarmForRedirect.value = c.mode === 'swarm'
     redirectDialogOpen.value = true
   }
 }
@@ -364,7 +341,7 @@ const rowVirtualizer = useVirtualizer(
     getScrollElement: () => parentRef.value,
     estimateSize: (index) => {
       const c = filteredContainers.value[index]
-      if (c && c.state === 'running' && expandedIds.value.has(c.full_id)) {
+      if (c && c.state === 'running' && expandedIds.value.has(c.id)) {
         return 200 
       }
       return 100 
@@ -537,7 +514,7 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
               transform: `translateY(${virtualRow.start}px)`,
             }"
           >
-            <template v-for="c in [filteredContainers[virtualRow.index]]" :key="c ? c.full_id : 'loading'">
+            <template v-for="c in [filteredContainers[virtualRow.index]]" :key="c ? c.id : 'loading'">
               <div
                 v-if="c"
                 class="group relative overflow-hidden rounded-xl border border-primary/5 bg-secondary/10 hover:bg-secondary/30 transition-all duration-300"
@@ -563,7 +540,7 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
                       
                       <!-- Visit Site Quick Button -->
                       <Button
-                        v-if="getTraefikUrl(c.labels)"
+                        v-if="c.app_url"
                         variant="ghost" 
                         size="icon" 
                         class="h-8 w-8 rounded-full hover:bg-background/80 text-primary"
@@ -579,10 +556,10 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
                         variant="ghost" 
                         size="icon" 
                         class="h-8 w-8 rounded-full hover:bg-background/80"
-                        @click="toggleExpand(c.full_id)"
+                        @click="toggleExpand(c.id)"
                       >
                         <Icon 
-                          :name="expandedIds.has(c.full_id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" 
+                          :name="expandedIds.has(c.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" 
                           class="size-4 text-muted-foreground transition-transform duration-200" 
                         />
                       </Button>
@@ -596,14 +573,14 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem
-                            v-if="getTraefikUrl(c.labels)"
+                            v-if="c.app_url"
                             class="py-2.5 cursor-pointer text-primary focus:text-primary font-medium"
                             @click="handleVisitSite(c)"
                           >
                             <Icon name="i-lucide-external-link" class="mr-2 size-4" />
                             Visit Site
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator v-if="getTraefikUrl(c.labels)" />
+                          <DropdownMenuSeparator v-if="c.app_url" />
                           <DropdownMenuItem class="py-2.5 cursor-pointer" @click="handleViewLogs(c)">
                             <Icon name="i-lucide-file-text" class="mr-2 size-4" />
                             View Logs
@@ -653,7 +630,7 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
                               v-if="!redeployingIds.has(c.id)"
                               class="ml-auto text-[8px] font-semibold px-1 py-0.5 rounded bg-sky-500/10 text-sky-400"
                             >
-                              {{ c.labels?.['com.docker.swarm.service.id'] ? 'Swarm' : 'Restart' }}
+                              {{ c.mode === 'swarm' ? 'Swarm' : 'Restart' }}
                             </span>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -677,11 +654,11 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
 
               <!-- COLLAPSIBLE STATS SECTION -->
               <div 
-                v-if="c.state === 'running' && expandedIds.has(c.full_id)" 
+                v-if="c.state === 'running' && expandedIds.has(c.id)" 
                 class="grid grid-cols-2 gap-4 pt-1 border-t border-primary/5 animate-in fade-in slide-in-from-top-1 duration-200"
               >
                 <!-- Loading State skeleton -->
-                <div v-if="statsLoading.has(c.full_id)" class="col-span-2 grid grid-cols-2 gap-4 mt-2 mb-1">
+                <div v-if="statsLoading.has(c.id)" class="col-span-2 grid grid-cols-2 gap-4 mt-2 mb-1">
                   <div class="space-y-2 animate-pulse">
                     <div class="flex justify-between">
                       <div class="h-2 w-8 bg-muted rounded"></div>

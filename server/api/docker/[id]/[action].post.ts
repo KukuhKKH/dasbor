@@ -1,16 +1,20 @@
 import Docker from 'dockerode'
+import { validateWorkloadId } from '../../../utils/dockerSecurity'
+import { rateLimitMiddleware } from '../../../utils/rateLimiter'
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' })
-const CONTAINER_ID_RE = /^[a-f0-9]{12,64}$/i
 const ALLOWED_ACTIONS = new Set(['start', 'stop', 'restart', 'pause', 'unpause', 'remove'])
 
 export default defineEventHandler(async (event) => {
   requireDockerAuth(event)
 
+  // Rate limits per IP logic
+  rateLimitMiddleware(event)
+
   const id = getRouterParam(event, 'id')
   const action = getRouterParam(event, 'action')
 
-  if (!id || !CONTAINER_ID_RE.test(id)) {
+  if (!id || !validateWorkloadId(id)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid container ID' })
   }
 
