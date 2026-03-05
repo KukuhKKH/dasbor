@@ -271,8 +271,14 @@ async function fetchAllContainers(withStats: boolean) {
 
   const serviceLabelsMap = new Map<string, Record<string, string>>();
   services.forEach((s: any) => {
-    if (s.ID && s.Spec?.Labels) {
-      serviceLabelsMap.set(s.ID, s.Spec.Labels);
+    if (s.ID) {
+      const specLabels = s.Spec?.Labels || {};
+      const containerSpecLabels = s.Spec?.TaskTemplate?.ContainerSpec?.Labels || {};
+      const merged = { ...containerSpecLabels, ...specLabels };
+
+      if (Object.keys(merged).length > 0) {
+        serviceLabelsMap.set(s.ID, merged);
+      }
     }
   });
 
@@ -286,8 +292,8 @@ async function fetchAllContainers(withStats: boolean) {
         const serviceId = c.Labels?.["com.docker.swarm.service.id"];
         if (serviceId && serviceLabelsMap.has(serviceId)) {
           processed.labels = {
-            ...serviceLabelsMap.get(serviceId),
             ...processed.labels,
+            ...serviceLabelsMap.get(serviceId),
           };
         }
 
