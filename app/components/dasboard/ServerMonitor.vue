@@ -9,20 +9,32 @@ const { data, refresh, status } = await useFetch<NetworkStats>('/api/network', {
 })
 
 const uptimeSeconds = ref(0)
+let localStartTime: number | null = null
 
 watch(data, (newVal) => {
-  if (newVal && newVal.uptime?.seconds) {
-    uptimeSeconds.value = newVal.uptime.seconds
+  if (newVal?.uptime?.since && newVal?.timestamp) {
+    const serverStartTime = new Date(newVal.uptime.since).getTime()
+    const serverNow = new Date(newVal.timestamp).getTime()
+    const clientNowAtReceipt = Date.now()
+    
+    const skew = clientNowAtReceipt - serverNow
+    
+    localStartTime = serverStartTime + skew
+    updateUptime()
   }
 }, { immediate: true })
 
-// Count up every second
+function updateUptime() {
+  if (localStartTime) {
+    uptimeSeconds.value = Math.floor((Date.now() - localStartTime) / 1000)
+  }
+}
+
 useIntervalFn(() => {
-  uptimeSeconds.value++
+  updateUptime()
 }, 1000)
 
-// Auto-refresh every 15 minutes
-useIntervalFn(() => refresh(), 15 * 60 * 1000)
+useIntervalFn(() => refresh(), 5 * 60 * 1000)
 
 function formatUptime(seconds: number) {
   const d = Math.floor(seconds / 86400)

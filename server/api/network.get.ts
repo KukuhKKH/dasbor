@@ -22,6 +22,7 @@ export default defineCachedEventHandler(async (event) => {
     }
 
     return {
+      timestamp: new Date().toISOString(),
       uptime: {
         seconds: time.uptime,
         since: new Date(Date.now() - (time.uptime * 1000)).toISOString(),

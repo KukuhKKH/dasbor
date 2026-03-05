@@ -1,4 +1,5 @@
 export interface NetworkStats {
+  timestamp: string;
   uptime: {
     seconds: number
     since: string
