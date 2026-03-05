@@ -2,10 +2,13 @@
  * 🔒 ALLOWED DOMAINS FOR APP URLs
  */
 const ALLOWED_APP_DOMAINS = [
-    '.local.elok.id',
-    '.local.spmb.id',
-    '.home.test',
-    '.test'
+    '.test',
+    'banglipai.tech',
+    '.banglipai.tech',
+    '.tech',
+    '.id',
+    '.com',
+    '.net'
 ];
 
 export function validateWorkloadId(id: string): boolean {
@@ -17,7 +20,7 @@ export function validateWorkloadId(id: string): boolean {
 export function extractAppUrl(labels: Record<string, string> = {}): string | null {
     for (const [key, value] of Object.entries(labels)) {
         if (key.startsWith('traefik.http.routers.') && key.endsWith('.rule')) {
-            const hostRegex = /Host\(`([^`]+)`\)/g;
+            const hostRegex = /Host\([`"]([^`"]+)[`"]\)/g;
             let match;
 
             while ((match = hostRegex.exec(value)) !== null) {
