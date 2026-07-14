@@ -15,6 +15,7 @@ interface Container {
   app_url: string | null;
   stack: string | null;
   service: string | null;
+  displayName?: string;
 }
 
 type PendingAction =
@@ -77,10 +78,24 @@ const STATE_FILTERS: { label: string; value: StateFilter }[] = [
 // Pre-compute normalized data
 const normalizedContainers = computed(() => {
   const list = containers.value ?? []
-  return list.map(c => ({
-    ...c,
-    _searchStr: (c.name + ' ' + c.image).toLowerCase()
-  }))
+  return list
+    .filter(c => {
+      const name = c.name.toLowerCase()
+      if (name.includes('traefik')) return false
+      if (name.includes('cloudflared') || name.includes('tunnel')) return false
+      return true
+    })
+    .map(c => {
+      let displayName = c.name
+      if (c.mode === 'swarm' && displayName.includes('.')) {
+        displayName = displayName.split('.')[0]
+      }
+      return {
+        ...c,
+        displayName,
+        _searchStr: (displayName + ' ' + c.image).toLowerCase()
+      }
+    })
 })
 
 const filteredContainers = computed(() => {
@@ -531,7 +546,7 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center justify-between mb-0.5">
                     <h3 class="font-bold text-sm text-foreground truncate pr-2 group-hover:text-primary transition-colors">
-                      {{ c.name }}
+                      {{ c.displayName || c.name }}
                     </h3>
                     <div class="flex items-center gap-1">
                       <span class="text-[9px] uppercase font-bold tracking-wider text-muted-foreground/60 bg-background/40 px-1.5 py-0.5 rounded mr-1">
