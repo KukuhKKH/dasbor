@@ -110,7 +110,7 @@ const filteredContainers = computed(() => {
 })
 
 const stateCounts = computed(() => {
-  const all = containers.value ?? []
+  const all = normalizedContainers.value ?? []
   return {
     all: all.length,
     running:    all.filter(c => c.state === "running").length,
@@ -121,7 +121,7 @@ const stateCounts = computed(() => {
 })
 
 const activeCount = computed(() =>
-  containers.value?.filter((c) => c.state === "running").length || 0
+  normalizedContainers.value?.filter((c) => c.state === "running").length || 0
 )
 
 const STATS_POLLING_LIMIT = 50;
@@ -509,7 +509,7 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
           v-if="searchQuery || stateFilter !== 'all'"
           class="flex items-center justify-between text-[10px] text-muted-foreground/50 px-1 mb-2 shrink-0"
         >
-          <span>Menampilkan {{ filteredContainers.length }} dari {{ containers?.length }} container</span>
+          <span>Menampilkan {{ filteredContainers.length }} dari {{ normalizedContainers.length }} container</span>
           <button
             class="hover:text-foreground transition-colors underline underline-offset-2 min-h-[36px] px-2"
             @click="searchQuery = ''; stateFilter = 'all'"
